@@ -1,0 +1,15 @@
+# 数据源配置模板 - PostgreSQL 数据库
+
+name: "销售数据库"
+type: "database"
+db_type: "postgresql"  # 或 mysql
+host: "localhost"
+port: 5432
+database: "sales_db"
+username: "your_username"
+password: "your_password"
+table: "sales_data"
+
+# 连接池配置（可选）
+pool_size: 5
+max_overflow: 10

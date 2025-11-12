@@ -1,0 +1,16 @@
+# 数据源配置模板 - CSV 文件
+
+name: "销售数据 CSV"
+type: "csv"
+file_path: "data/sample_sales.csv"
+encoding: "utf-8"
+separator: ","
+
+# 字段映射（可选）
+field_mapping:
+  date: "日期"
+  product: "产品"
+  category: "类别"
+  region: "地区"
+  sales: "销售额"
+  quantity: "数量"
