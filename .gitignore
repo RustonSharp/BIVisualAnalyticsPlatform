@@ -1,0 +1,103 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Type checker caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env/
+.conda/
+conda-env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE settings
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs & runtime files
+logs/
+*.log
+*.pid
+*.pid.lock
+
+# Environment variables
+.env
+.env.*
+*.env
+
+# Local data & exports
+uploads/
+exports/
+tmp/
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated configuration files
+config/*.yaml
+config/*.yml
+config/*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Backup files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+*.orig
+*.rej
+
+test_data/
+req.md
