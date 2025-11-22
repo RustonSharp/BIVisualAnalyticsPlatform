@@ -144,6 +144,31 @@ app.index_string = f"""
 </html>
 """
 
+def default_chart_assignments() -> Dict[str, Any]:
+    """获取图表字段配置的默认结构"""
+    return {"x": None, "y": [], "group": None}
+
+
+def render_assigned_fields(value: Optional[Any], placeholder: str, multiple: bool = False):
+    """根据当前字段配置渲染拖拽区域内容"""
+    if multiple:
+        items = value if isinstance(value, list) else ([] if value is None else [value])
+    else:
+        items = [value] if value else []
+    if not items:
+        return html.P(placeholder, className="text-muted text-center mb-0")
+    badges = [
+        dbc.Badge(
+            str(item),
+            color="secondary",
+            pill=True,
+            className="me-2 mb-2"
+        )
+        for item in items
+    ]
+    wrapper_class = "d-flex flex-wrap" if multiple and len(badges) > 1 else None
+    return html.Div(badges, className=wrapper_class)
+
 # ==========================================
 # 自定义样式变量
 # ==========================================
@@ -407,6 +432,8 @@ def create_chart_designer_page():
     return dbc.Container(
         [
             html.H2("图表设计器", className="mb-4"),
+            dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
+            dcc.Input(id="dnd-last-event", type="text", value="", style={"display": "none"}),
             
             dbc.Row(
                 [
@@ -421,10 +448,8 @@ def create_chart_designer_page():
                                         [
                                             dbc.Select(
                                                 id="chart-datasource-select",
-                                                options=[
-                                                    {"label": "销售数据_CSV", "value": "datasource1"},
-                                                ],
-                                                value="datasource1",
+                                                options=[],
+                                                value=None,
                                             ),
                                         ]
                                     ),
@@ -439,11 +464,7 @@ def create_chart_designer_page():
                                     dbc.CardBody(
                                         [
                                             html.Div(
-                                                [
-                                                    dbc.Badge("date (日期)", color="primary", className="m-1 p-2", style={"cursor": "grab"}),
-                                                    dbc.Badge("value (数值)", color="success", className="m-1 p-2", style={"cursor": "grab"}),
-                                                    dbc.Badge("category (文本)", color="info", className="m-1 p-2", style={"cursor": "grab"}),
-                                                ],
+                                                html.P("请选择数据源后查看字段", className="text-muted mb-0"),
                                                 id="field-list",
                                             ),
                                         ]
@@ -484,31 +505,67 @@ def create_chart_designer_page():
                                         [
                                             html.Div(
                                                 [
-                                                    html.Label("X 轴", className="form-label fw-bold"),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("X 轴", className="form-label fw-bold mb-0"),
+                                                            dbc.Button("清空", id="btn-clear-x-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                        ],
+                                                        className="d-flex align-items-center mb-2"
+                                                    ),
                                                     html.Div(
                                                         id="drop-x-axis",
                                                         children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center py-3 border border-dashed rounded"),
+                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                         ],
-                                                        style={"min-height": "60px", "margin-bottom": "15px"},
+                                                        style={
+                                                            "min-height": "60px",
+                                                            "margin-bottom": "15px",
+                                                            "border": "2px dashed #ced4da",
+                                                            "borderRadius": "6px",
+                                                            "padding": "0.5rem"
+                                                        },
                                                         className="drop-zone",
                                                     ),
-                                                    html.Label("Y 轴", className="form-label fw-bold"),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("Y 轴", className="form-label fw-bold mb-0"),
+                                                            dbc.Button("清空", id="btn-clear-y-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                        ],
+                                                        className="d-flex align-items-center mb-2"
+                                                    ),
                                                     html.Div(
                                                         id="drop-y-axis",
                                                         children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center py-3 border border-dashed rounded"),
+                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                         ],
-                                                        style={"min-height": "60px", "margin-bottom": "15px"},
+                                                        style={
+                                                            "min-height": "60px",
+                                                            "margin-bottom": "15px",
+                                                            "border": "2px dashed #ced4da",
+                                                            "borderRadius": "6px",
+                                                            "padding": "0.5rem"
+                                                        },
                                                         className="drop-zone",
                                                     ),
-                                                    html.Label("分组/颜色", className="form-label fw-bold"),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("分组/颜色", className="form-label fw-bold mb-0"),
+                                                            dbc.Button("清空", id="btn-clear-group", color="link", size="sm", className="p-0 ms-2"),
+                                                        ],
+                                                        className="d-flex align-items-center mb-2"
+                                                    ),
                                                     html.Div(
                                                         id="drop-group",
                                                         children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center py-3 border border-dashed rounded"),
+                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                         ],
-                                                        style={"min-height": "60px", "margin-bottom": "15px"},
+                                                        style={
+                                                            "min-height": "60px",
+                                                            "margin-bottom": "15px",
+                                                            "border": "2px dashed #ced4da",
+                                                            "borderRadius": "6px",
+                                                            "padding": "0.5rem"
+                                                        },
                                                         className="drop-zone",
                                                     ),
                                                 ]
@@ -600,20 +657,7 @@ def create_chart_designer_page():
                                     dbc.CardBody(
                                         [
                                             html.Div(id="chart-preview", children=[
-                                                # 示例图表预览（使用示例数据）
-                                                dcc.Graph(
-                                                    figure=px.line(
-                                                        pd.DataFrame({
-                                                            'date': pd.date_range('2025-01-01', periods=10),
-                                                            'value': [10, 12, 15, 13, 18, 20, 17, 19, 22, 21]
-                                                        }),
-                                                        x='date',
-                                                        y='value',
-                                                        title='示例折线图预览'
-                                                    ).update_layout(template='plotly_white', height=500),
-                                                    id="preview-chart"
-                                                ),
-                                                html.P("配置图表参数后，预览将自动更新", className="text-muted text-center small"),
+                                                html.P("请选择数据源并配置字段以生成预览", className="text-muted text-center py-5"),
                                             ]),
                                         ]
                                     ),
@@ -1434,11 +1478,16 @@ def handle_datasource_actions(test_clicks, delete_clicks):
     if not ctx.triggered:
         return html.P("请选择一个数据源查看预览", className="text-muted text-center py-5"), dash.no_update
     
-    button_info = ctx.triggered[0]["prop_id"]
-    
+    triggered = ctx.triggered[0]["prop_id"]
+    try:
+        trigger_id = json.loads(triggered.split(".")[0])
+    except json.JSONDecodeError:
+        return dbc.Alert("操作标识解析失败", color="danger"), dash.no_update
+    action_type = trigger_id.get("type")
+    datasource_id = trigger_id.get("index")
+
     # 删除数据源
-    if "delete-datasource" in str(button_info):
-        datasource_id = button_info["index"]
+    if action_type == "delete-datasource":
         try:
             config_manager.delete_datasource(datasource_id)
             datasources = config_manager.load_datasources()
@@ -1450,8 +1499,7 @@ def handle_datasource_actions(test_clicks, delete_clicks):
             return dbc.Alert(f"删除失败：{str(e)}", color="danger"), table
     
     # 测试/预览数据源
-    elif "test-datasource" in str(button_info):
-        datasource_id = button_info["index"]
+    elif action_type == "test-datasource":
         ds_config = config_manager.get_datasource(datasource_id)
         
         if not ds_config:
@@ -1587,7 +1635,8 @@ def load_datasource_for_edit(datasource_id):
 # ==========================================
 
 @app.callback(
-    Output("chart-datasource-select", "options"),
+    [Output("chart-datasource-select", "options"),
+     Output("chart-datasource-select", "value")],
     Input("url", "pathname")
 )
 def load_chart_datasource_options(pathname):
@@ -1596,97 +1645,213 @@ def load_chart_datasource_options(pathname):
         datasources = config_manager.load_datasources()
         options = [
             {"label": ds.get('name', 'Unnamed'), "value": ds.get('id')}
-            for ds in datasources
+            for ds in datasources if ds.get('id')
         ]
-        return options if options else [{"label": "请先添加数据源", "value": None}]
-    return []
+        selected = options[0]["value"] if options else None
+        if not options:
+            options = [{"label": "请先添加数据源", "value": None, "disabled": True}]
+        return options, selected
+    return [], None
+
+
+@app.callback(
+    [Output("field-list", "children"),
+     Output("chart-field-assignments", "data", allow_duplicate=True)],
+    Input("chart-datasource-select", "value"),
+    prevent_initial_call="initial_duplicate"
+)
+def load_datasource_fields(datasource_id):
+    """根据数据源加载可拖拽字段列表"""
+    assignments = default_chart_assignments()
+    if not datasource_id:
+        return html.P("请选择数据源后查看字段", className="text-muted mb-0"), assignments
+    try:
+        ds_config = config_manager.get_datasource(datasource_id)
+        if not ds_config:
+            return html.P("数据源不存在", className="text-danger mb-0"), assignments
+        adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+        schema = adapter.get_schema()
+        columns = schema.get('columns', []) if isinstance(schema, dict) else []
+        if not columns:
+            return html.P("未检测到字段，请检查数据源配置", className="text-muted mb-0"), assignments
+        type_labels = {
+            'date': '日期',
+            'datetime64[ns]': '日期',
+            'numeric': '数值',
+            'integer': '整数',
+            'text': '文本'
+        }
+        type_colors = {
+            'date': 'primary',
+            'datetime64[ns]': 'primary',
+            'numeric': 'success',
+            'integer': 'success',
+            'text': 'info'
+        }
+        badges: List[Any] = []
+        for col in columns:
+            col_name = col.get('name')
+            if not col_name:
+                continue
+            col_type = col.get('type', 'text')
+            label = type_labels.get(col_type, '字段')
+            color_class = type_colors.get(col_type, 'secondary')
+            badge = html.Span(
+                f"{col_name} ({label})",
+                className=f"badge rounded-pill bg-{color_class} me-2 mb-2 draggable-field",
+                style={"cursor": "grab"},
+                **{"data-field": col_name, "data-type": col_type, "draggable": "true"}
+            )
+            badges.append(badge)
+        if not badges:
+            return html.P("未检测到字段，请检查数据源", className="text-muted mb-0"), assignments
+        return html.Div(badges, className="d-flex flex-wrap"), assignments
+    except Exception as exc:
+        return dbc.Alert(f"加载字段失败：{exc}", color="danger"), assignments
+
+
+@app.callback(
+    [Output("drop-x-axis", "children"),
+     Output("drop-y-axis", "children"),
+     Output("drop-group", "children")],
+    Input("chart-field-assignments", "data"),
+    prevent_initial_call=False
+)
+def sync_drop_zones(assignments):
+    """根据字段配置更新拖拽区域显示"""
+    assignments = assignments or default_chart_assignments()
+    return (
+        render_assigned_fields(assignments.get('x'), "拖拽字段到此处"),
+        render_assigned_fields(assignments.get('y'), "拖拽字段到此处", multiple=True),
+        render_assigned_fields(assignments.get('group'), "拖拽字段到此处"),
+    )
+
+
+@app.callback(
+    Output("chart-field-assignments", "data", allow_duplicate=True),
+    Input("dnd-last-event", "value"),
+    State("chart-field-assignments", "data"),
+    prevent_initial_call=True
+)
+def handle_drag_drop_event(event_payload, assignments):
+    """处理前端拖拽事件，更新字段配置"""
+    if not event_payload:
+        raise dash.exceptions.PreventUpdate
+    try:
+        event = json.loads(event_payload)
+    except json.JSONDecodeError:
+        raise dash.exceptions.PreventUpdate
+    field = event.get('field')
+    target = event.get('target')
+    if not field or target not in {'drop-x-axis', 'drop-y-axis', 'drop-group'}:
+        raise dash.exceptions.PreventUpdate
+    assignments = assignments or default_chart_assignments()
+    new_assignments = {
+        'x': assignments.get('x'),
+        'y': list(assignments.get('y', [])),
+        'group': assignments.get('group')
+    }
+    if new_assignments.get('x') == field:
+        new_assignments['x'] = None
+    if field in new_assignments.get('y', []):
+        new_assignments['y'] = [item for item in new_assignments['y'] if item != field]
+    if new_assignments.get('group') == field:
+        new_assignments['group'] = None
+    if target == 'drop-x-axis':
+        new_assignments['x'] = field
+    elif target == 'drop-y-axis':
+        if field not in new_assignments['y']:
+            new_assignments['y'].append(field)
+    elif target == 'drop-group':
+        new_assignments['group'] = field
+    return new_assignments
+
+
+@app.callback(
+    Output("chart-field-assignments", "data", allow_duplicate=True),
+    [Input("btn-clear-x-axis", "n_clicks"),
+     Input("btn-clear-y-axis", "n_clicks"),
+     Input("btn-clear-group", "n_clicks")],
+    State("chart-field-assignments", "data"),
+    prevent_initial_call=True
+)
+def clear_axis_assignments(clear_x, clear_y, clear_group, assignments):
+    """支持手动清空某个轴的字段配置"""
+    if not callback_context.triggered:
+        raise dash.exceptions.PreventUpdate
+    triggered = callback_context.triggered[0]['prop_id'].split('.')[0]
+    assignments = assignments or default_chart_assignments()
+    new_assignments = {
+        'x': assignments.get('x'),
+        'y': list(assignments.get('y', [])),
+        'group': assignments.get('group')
+    }
+    if triggered == "btn-clear-x-axis":
+        new_assignments['x'] = None
+    elif triggered == "btn-clear-y-axis":
+        new_assignments['y'] = []
+    elif triggered == "btn-clear-group":
+        new_assignments['group'] = None
+    else:
+        raise dash.exceptions.PreventUpdate
+    return new_assignments
+
 
 @app.callback(
     Output("chart-preview", "children"),
     [Input("chart-datasource-select", "value"),
      Input("chart-type", "value"),
-     Input("drop-x-axis", "children"),
-     Input("drop-y-axis", "children"),
-     Input("drop-group", "children"),
+     Input("chart-field-assignments", "data"),
      Input("agg-function", "value"),
      Input("chart-title", "value"),
      Input("color-theme", "value"),
      Input("chart-options", "value")],
     prevent_initial_call=False
 )
-def update_chart_preview(datasource_id, chart_type, x_axis, y_axis, group, 
-                         agg_function, title, color_theme, options):
-    """更新图表预览"""
+def update_chart_preview(datasource_id, chart_type, assignments, agg_function, title, color_theme, options):
+    """根据当前配置生成预览图表"""
     try:
         if not datasource_id:
             return html.P("请选择数据源", className="text-muted text-center py-5")
-        
-        # 获取数据源配置
         ds_config = config_manager.get_datasource(datasource_id)
         if not ds_config:
             return html.P("数据源不存在", className="text-muted text-center py-5")
-        
-        # 获取数据
-        adapter = data_source_manager.get_adapter(datasource_id, ds_config)
-        if not adapter:
-            adapter = DataSourceAdapter(ds_config)
-        
+        adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
         df = adapter.fetch_data(limit=1000)
-        
-        if df is None or len(df) == 0:
+        if df is None or df.empty:
             return html.P("数据为空，无法生成图表", className="text-muted text-center py-5")
-        
-        # 从拖拽区域提取字段名（简化处理）
-        x_field = None
-        y_field = None
-        group_field = None
-        
-        # 尝试从 UI 组件中提取字段（简化版，实际需要更复杂的解析）
-        # 这里假设用户已手动配置了字段
-        schema = adapter.get_schema()
-        available_fields = [col['name'] for col in schema['columns']]
-        
-        # 使用第一个日期字段作为 X 轴，第一个数值字段作为 Y 轴
-        if chart_type in ['line', 'bar']:
-            for col in schema['columns']:
-                if col['type'] == 'date' and not x_field:
-                    x_field = col['name']
-                if col['type'] in ['numeric', 'integer'] and not y_field:
-                    y_field = col['name']
-                    break
-        
-        if not x_field or not y_field:
-            # 如果没有找到合适的字段，使用示例数据
-            if len(df.columns) >= 2:
-                x_field = str(df.columns[0])
-                if len(df.columns) >= 2 and pd.api.types.is_numeric_dtype(df[df.columns[1]]):
-                    y_field = str(df.columns[1])
-                elif len(df.columns) >= 3 and pd.api.types.is_numeric_dtype(df[df.columns[2]]):
-                    y_field = str(df.columns[2])
-                else:
-                    y_field = None
-        
-        if x_field is None or y_field is None:
-            return html.P("请配置 X 轴和 Y 轴字段", className="text-muted text-center py-5")
-        
-        # 构建图表配置
+        assignments = assignments or default_chart_assignments()
+        x_field = assignments.get('x')
+        y_fields = assignments.get('y') or []
+        group_field = assignments.get('group')
+        if chart_type != 'table':
+            if chart_type != 'pie' and not x_field:
+                return html.P("请将字段拖拽到 X 轴", className="text-muted text-center py-5")
+            if not y_fields:
+                return html.P("请至少选择一个 Y 轴字段", className="text-muted text-center py-5")
+            if chart_type == 'pie':
+                if not group_field and not x_field:
+                    return html.P("饼图需要分组字段", className="text-muted text-center py-5")
+                if not y_fields:
+                    return html.P("饼图需要一个数值字段", className="text-muted text-center py-5")
+                if not group_field:
+                    group_field = x_field
+        options = options or []
         chart_config = {
             "type": chart_type or "line",
             "x": x_field,
-            "y": y_field,
+            "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
             "group": group_field,
             "title": title or "图表预览",
             "color_theme": color_theme or "default",
-            "show_labels": "show-labels" in (options or []),
-            "show_legend": "show-legend" in (options or []),
+            "show_labels": "show-labels" in options,
+            "show_legend": "show-legend" in options,
             "agg_function": agg_function or "sum",
         }
-        
-        # 生成图表
+        if chart_type == 'table':
+            chart_config['limit'] = 100
         fig = chart_engine.create_chart(df, chart_config)
-        
         return dcc.Graph(figure=fig, id="preview-chart")
-        
     except Exception as e:
         return dbc.Alert(f"生成图表失败：{str(e)}", color="danger")
 
