@@ -15,13 +15,13 @@ if TYPE_CHECKING:
 class ChartEngine:
     """图表生成引擎"""
     
-    # 颜色主题配置
+    # 颜色主题配置 - 确保所有颜色值都是字符串列表
     COLOR_THEMES = {
-        'default': px.colors.qualitative.Plotly,
-        'blue': px.colors.sequential.Blues,
-        'orange': px.colors.sequential.Oranges,
-        'green': px.colors.sequential.Greens,
-        'purple': px.colors.sequential.Purples,
+        'default': [str(c) for c in px.colors.qualitative.Plotly],
+        'blue': [str(c) for c in px.colors.sequential.Blues],
+        'orange': [str(c) for c in px.colors.sequential.Oranges],
+        'green': [str(c) for c in px.colors.sequential.Greens],
+        'purple': [str(c) for c in px.colors.sequential.Purples],
     }
     
     def __init__(self):
@@ -158,9 +158,17 @@ class ChartEngine:
         
         # 应用颜色主题
         if color_theme in self.COLOR_THEMES:
-            fig.update_traces(line=dict(color=self.COLOR_THEMES[color_theme][0]))
+            colors = self.COLOR_THEMES[color_theme]
+            # 确保 colors 是列表
+            if not isinstance(colors, list):
+                colors = list(colors) if hasattr(colors, '__iter__') else [colors]
             if group:
-                fig.update_traces(line_color_discrete_sequence=self.COLOR_THEMES[color_theme])
+                # 对于分组图表，使用 color_discrete_sequence
+                fig.update_layout(colorway=colors)
+            else:
+                # 对于单线条图表，直接设置颜色
+                if colors:
+                    fig.update_traces(line=dict(color=colors[0] if len(colors) > 0 else 'blue'))
         
         # 数据标签
         if show_labels:
@@ -209,10 +217,19 @@ class ChartEngine:
         
         # 应用颜色主题
         if color_theme in self.COLOR_THEMES:
+            colors = self.COLOR_THEMES[color_theme]
+            # 确保 colors 是列表且所有元素都是字符串
+            if not isinstance(colors, list):
+                colors = list(colors) if hasattr(colors, '__iter__') else [colors]
+            colors = [str(c) for c in colors if c]
             if group:
-                fig.update_traces(marker_color_discrete_sequence=self.COLOR_THEMES[color_theme])
+                # 对于分组图表，使用 colorway 布局属性
+                if colors:
+                    fig.update_layout(colorway=colors)
             else:
-                fig.update_traces(marker_color=self.COLOR_THEMES[color_theme][0])
+                # 对于单柱状图，设置 marker color（必须是颜色字符串）
+                if colors:
+                    fig.update_traces(marker_color=colors[0])
         
         # 数据标签
         if show_labels:
@@ -251,7 +268,19 @@ class ChartEngine:
         
         # 应用颜色主题
         if color_theme in self.COLOR_THEMES:
-            fig.update_traces(marker_colors=self.COLOR_THEMES[color_theme])
+            colors = self.COLOR_THEMES[color_theme]
+            # 确保 colors 是列表
+            if not isinstance(colors, list):
+                colors = list(colors) if hasattr(colors, '__iter__') else [colors]
+            # 对于饼图，使用 marker colors
+            if colors:
+                # 如果数据点数量超过颜色数量，需要扩展颜色列表
+                num_values = len(data[group].unique()) if group in data.columns else len(data)
+                if num_values > len(colors):
+                    # 重复颜色列表
+                    extended_colors = (colors * ((num_values // len(colors)) + 1))[:num_values]
+                    colors = extended_colors
+                fig.update_traces(marker_colors=colors[:num_values])
         
         # 数据标签
         if show_labels:
