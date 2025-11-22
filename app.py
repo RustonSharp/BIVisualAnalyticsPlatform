@@ -4,7 +4,7 @@ BI 数据可视化与分析平台
 """
 
 import dash
-from dash import dcc, html, Input, Output, State, callback_context, ALL
+from dash import dcc, html, Input, Output, State, callback_context, ALL, clientside_callback, ClientsideFunction
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import plotly.express as px
@@ -121,6 +121,139 @@ body {
 }
 """
 
+# JavaScript拖拽功能代码
+# type: ignore
+DRAG_DROP_SCRIPT = """
+<script>
+// 拖拽功能实现
+(function() {
+    let draggedElement = null;
+    
+    // 延迟初始化，等待Dash应用加载完成
+    function initDragDrop() {
+        // 处理字段拖拽开始
+        document.addEventListener('dragstart', function(e) {
+            const field = e.target.closest('.draggable-field');
+            if (field) {
+                draggedElement = field;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', '');
+                field.style.opacity = '0.5';
+            }
+        }, true);
+        
+        // 处理拖拽结束
+        document.addEventListener('dragend', function(e) {
+            if (draggedElement) {
+                draggedElement.style.opacity = '1';
+                draggedElement = null;
+            }
+        }, true);
+        
+        // 处理放置区域的拖拽悬停
+        document.addEventListener('dragover', function(e) {
+            const dropZone = e.target.closest('.drop-zone');
+            if (dropZone && draggedElement) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                dropZone.style.backgroundColor = '#e3f2fd';
+                dropZone.style.borderColor = '#2196f3';
+            }
+        }, true);
+        
+        // 处理离开放置区域
+        document.addEventListener('dragleave', function(e) {
+            const dropZone = e.target.closest('.drop-zone');
+            if (dropZone) {
+                dropZone.style.backgroundColor = '';
+                dropZone.style.borderColor = '';
+            }
+        }, true);
+        
+        // 处理放置事件
+        document.addEventListener('drop', function(e) {
+            const dropZone = e.target.closest('.drop-zone');
+            if (dropZone && draggedElement) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.backgroundColor = '';
+                dropZone.style.borderColor = '';
+                
+                const fieldName = draggedElement.getAttribute('data-field');
+                const targetId = dropZone.id;
+                
+                // 更新隐藏输入框的值
+                const eventData = JSON.stringify({
+                    field: fieldName,
+                    target: targetId
+                });
+                
+                // 使用Dash的方式更新输入框并触发回调
+                const dndInput = document.getElementById('dnd-last-event');
+                if (dndInput) {
+                    // 创建一个唯一的时间戳，确保Dash检测到变化
+                    const timestamp = Date.now();
+                    const newValue = eventData + '|' + timestamp;
+                    
+                    // 使用原生输入值设置器来触发React的onChange（Dash使用React）
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(dndInput, newValue);
+                    
+                    // 触发input事件（React会监听这个事件）
+                    const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+                    dndInput.dispatchEvent(inputEvent);
+                    
+                    // 触发change事件
+                    const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+                    dndInput.dispatchEvent(changeEvent);
+                    
+                    // 尝试触发React的合成事件（如果Dash使用React）
+                    const syntheticInputEvent = new Event('input', { bubbles: true });
+                    Object.defineProperty(syntheticInputEvent, 'target', {
+                        writable: false,
+                        value: dndInput
+                    });
+                    dndInput.dispatchEvent(syntheticInputEvent);
+                    
+                    // 如果有Dash的客户端回调API，直接调用
+                    if (window.dash_clientside && typeof window.dash_clientside.call_clientside_callback === 'function') {
+                        try {
+                            // 尝试调用客户端回调
+                            window.dash_clientside.call_clientside_callback('dnd-last-event', 'value', newValue);
+                        } catch (e) {
+                            console.log('Could not call dash clientside callback directly');
+                        }
+                    }
+                    
+                    // 额外尝试：直接通过Dash的Props设置（如果可用）
+                    if (window.dash && window.dash.setProps) {
+                        try {
+                            window.dash.setProps('dnd-last-event', { value: newValue });
+                        } catch (e) {
+                            console.log('Could not use dash.setProps');
+                        }
+                    }
+                    
+                    console.log('Drag drop event sent:', eventData);
+                }
+                
+                draggedElement = null;
+            }
+        }, true);
+    }
+    
+    // 等待DOM和Dash加载完成后初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initDragDrop);
+    } else {
+        // DOM已经加载完成，延迟一点确保Dash也加载完成
+        setTimeout(initDragDrop, 100);
+    }
+})();
+</script>
+"""
+
 app.index_string = f"""
 <!DOCTYPE html>
 <html>
@@ -140,6 +273,7 @@ app.index_string = f"""
             {{%scripts%}}
             {{%renderer%}}
         </footer>
+        {DRAG_DROP_SCRIPT}
     </body>
 </html>
 """
@@ -1737,10 +1871,17 @@ def handle_drag_drop_event(event_payload, assignments):
     """处理前端拖拽事件，更新字段配置"""
     if not event_payload:
         raise dash.exceptions.PreventUpdate
+    
+    # 处理带时间戳的事件数据
+    event_str = event_payload
+    if '|' in event_str:
+        event_str = event_str.split('|')[0]
+    
     try:
-        event = json.loads(event_payload)
+        event = json.loads(event_str)
     except json.JSONDecodeError:
         raise dash.exceptions.PreventUpdate
+    
     field = event.get('field')
     target = event.get('target')
     if not field or target not in {'drop-x-axis', 'drop-y-axis', 'drop-group'}:

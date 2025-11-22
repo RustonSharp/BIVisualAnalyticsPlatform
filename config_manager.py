@@ -182,25 +182,25 @@ class ConfigManager:
             'exported_at': datetime.now().isoformat()
         }
         
-        export_path = Path(export_path)
-        if export_path.suffix == '.yaml' or export_path.suffix == '.yml':
-            with open(export_path, 'w', encoding='utf-8') as f:
+        export_path_obj = Path(export_path)
+        if export_path_obj.suffix == '.yaml' or export_path_obj.suffix == '.yml':
+            with open(export_path_obj, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
         else:
-            with open(export_path, 'w', encoding='utf-8') as f:
+            with open(export_path_obj, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         
         return True
     
     def import_config(self, import_path: str) -> bool:
         """从文件导入配置"""
-        import_path = Path(import_path)
+        import_path_obj = Path(import_path)
         
-        if import_path.suffix == '.yaml' or import_path.suffix == '.yml':
-            with open(import_path, 'r', encoding='utf-8') as f:
+        if import_path_obj.suffix == '.yaml' or import_path_obj.suffix == '.yml':
+            with open(import_path_obj, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
         else:
-            with open(import_path, 'r', encoding='utf-8') as f:
+            with open(import_path_obj, 'r', encoding='utf-8') as f:
                 config = json.load(f)
         
         # 导入数据源
