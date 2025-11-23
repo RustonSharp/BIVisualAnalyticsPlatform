@@ -27,6 +27,8 @@ def create_dashboard_page():
             dcc.Store(id="dashboard-refresh-trigger", data=0),
             dcc.Store(id="export-status-message", data=None),  # 存储导出状态消息和时间戳
             dcc.Interval(id="export-status-interval", interval=100, disabled=True),  # 用于定时清除消息
+            dcc.Store(id="chart-filter-state", data=None),  # 存储图表联动筛选条件 {source_chart_id, field, value}
+            dcc.Store(id="chart-data-cache", data={}),  # 缓存每个图表的原始数据，用于筛选
             
             # 顶部工具栏
             dbc.Row(
@@ -57,6 +59,9 @@ def create_dashboard_page():
                                               id="btn-delete-dashboard", color="danger", size="sm"),
                                     dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
                                               id="btn-add-chart-to-dashboard", color="success", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-filter me-1"), "清除筛选"], 
+                                              id="btn-clear-chart-filter", color="warning", size="sm", outline=True, 
+                                              style={"display": "none"}),
                                     dbc.ButtonGroup([
                                         dbc.Button([html.I(className="fas fa-image me-1"), "PNG"], 
                                                   id="btn-export-dashboard-png", color="info", size="sm", outline=True),
@@ -84,7 +89,10 @@ def create_dashboard_page():
                                 [
                                     dbc.CardBody(
                                         [
-                                            html.Label("时间范围", className="form-label"),
+                                            html.Div([
+                                                html.Label("时间范围", className="form-label d-inline-block me-3"),
+                                                html.Div(id="chart-filter-status", className="d-inline-block me-3"),
+                                            ], className="mb-2"),
                                             dbc.RadioItems(
                                                 id="time-filter",
                                                 options=[
@@ -227,10 +235,12 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
          Input("time-filter", "value"),
          Input("start-date", "date"),
          Input("end-date", "date"),
-         Input("export-status-message", "data")],
+         Input("export-status-message", "data"),
+         Input("chart-filter-state", "data")],
+        [State("chart-data-cache", "data")],
         prevent_initial_call=False
     )
-    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status):
+    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status, filter_state, data_cache):
         """渲染仪表盘中的图表"""
         if not dashboard_config:
             return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")
@@ -345,7 +355,40 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     continue
                 
                 adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
-                df = adapter.fetch_data(limit=1000)
+                df_raw = adapter.fetch_data(limit=1000)
+                
+                # 确保 df 是 DataFrame 类型
+                if not isinstance(df_raw, pd.DataFrame):
+                    error_card = dbc.Card(
+                        [
+                            dbc.CardHeader(
+                                [
+                                    html.H5(chart_title, className="mb-0 d-inline-block"),
+                                    dbc.Button(
+                                        [html.I(className="fas fa-times")],
+                                        id={"type": "remove-chart-from-dashboard", "chart_id": chart_id},
+                                        color="link",
+                                        size="sm",
+                                        className="float-end",
+                                    ),
+                                ],
+                                className="d-flex justify-content-between align-items-center",
+                            ),
+                            dbc.CardBody(
+                                dbc.Alert("数据源返回的数据格式不正确", color="warning")
+                            ),
+                        ],
+                        className="mb-3",
+                    )
+                    current_row.append(dbc.Col(error_card, width=6))
+                    error_count += 1
+                    if len(current_row) == 2 or i == len(chart_ids) - 1:
+                        rows.append(dbc.Row(current_row, className="mb-3"))
+                        current_row = []
+                    continue
+                
+                # 明确类型为 DataFrame
+                df: pd.DataFrame = cast(pd.DataFrame, df_raw)
                 
                 if df is None or df.empty:
                     error_card = dbc.Card(
@@ -407,7 +450,9 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                             end = now
                         
                         if start is not None and end is not None:
-                            df = df[(df[date_field] >= start) & (df[date_field] <= end)]
+                            # DataFrame 的布尔索引总是返回 DataFrame
+                            df_filtered = df[(df[date_field] >= start) & (df[date_field] <= end)]
+                            df = cast(pd.DataFrame, df_filtered)  # type: ignore
                 
                 if time_filter == "custom" and start_date and end_date:
                     date_field = None
@@ -422,10 +467,40 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                             custom_end = pd.Timestamp(end_date)  # type: ignore
                             # 检查是否为有效的Timestamp（不是NaT）
                             if custom_start is not pd.NaT and custom_end is not pd.NaT:  # type: ignore
-                                df = df[(df[date_field] >= custom_start) & (df[date_field] <= custom_end)]
+                                # DataFrame 的布尔索引总是返回 DataFrame
+                                df_filtered = df[(df[date_field] >= custom_start) & (df[date_field] <= custom_end)]
+                                df = cast(pd.DataFrame, df_filtered)  # type: ignore
                         except (ValueError, TypeError):
                             # 如果日期转换失败，跳过筛选
                             pass
+                
+                # 应用图表联动筛选（如果存在筛选条件且当前图表不是源图表）
+                if filter_state and filter_state.get('source_chart_id') != chart_id:
+                    filter_field = filter_state.get('field')
+                    filter_value = filter_state.get('value')
+                    
+                    # 应用筛选条件
+                    if filter_field and filter_value is not None and filter_field in df.columns:
+                        # 应用筛选条件
+                        try:
+                            # 尝试数值比较
+                            if pd.api.types.is_numeric_dtype(df[filter_field]):
+                                # DataFrame 的布尔索引总是返回 DataFrame
+                                df_filtered = df[df[filter_field] == filter_value]
+                                df = cast(pd.DataFrame, df_filtered)  # type: ignore
+                            else:
+                                # 字符串匹配
+                                # DataFrame 的布尔索引总是返回 DataFrame
+                                df_filtered = df[df[filter_field].astype(str) == str(filter_value)]
+                                df = cast(pd.DataFrame, df_filtered)  # type: ignore
+                        except:
+                            # 如果筛选失败，尝试模糊匹配
+                            try:
+                                # DataFrame 的布尔索引总是返回 DataFrame
+                                df_filtered = df[df[filter_field].astype(str).str.contains(str(filter_value), na=False)]
+                                df = cast(pd.DataFrame, df_filtered)  # type: ignore
+                            except:
+                                pass  # 如果筛选失败，使用原始数据
                 
                 chart_config_for_engine = {
                     "type": chart_type,
@@ -447,12 +522,38 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 
                 fig = chart_engine.create_chart(df, chart_config_for_engine)
                 
-                # 创建图表卡片
+                # 检查是否是筛选源图表
+                is_filter_source = filter_state and filter_state.get('source_chart_id') == chart_id
+                is_filtered = filter_state and filter_state.get('source_chart_id') != chart_id and filter_state.get('field')
+                
+                # 创建图表卡片，如果是筛选源则添加边框高亮
+                card_class = "mb-3"
+                if is_filter_source:
+                    card_class += " border-primary border-2"
+                elif is_filtered:
+                    card_class += " border-info border-1"
+                
+                # 添加筛选提示
+                filter_badge = None
+                if is_filter_source:
+                    filter_badge = dbc.Badge("筛选源", color="primary", className="ms-2")
+                elif is_filtered:
+                    filter_field = filter_state.get('field')
+                    filter_value = filter_state.get('value')
+                    filter_badge = dbc.Badge(
+                        f"已筛选: {filter_field}={filter_value}", 
+                        color="info", 
+                        className="ms-2"
+                    )
+                
                 chart_card = dbc.Card(
                     [
                         dbc.CardHeader(
                             [
-                                html.H5(chart_title, className="mb-0 d-inline-block"),
+                                html.Div([
+                                    html.H5(chart_title, className="mb-0 d-inline-block"),
+                                    filter_badge,
+                                ], className="d-inline-block"),
                                 dbc.Button(
                                     [html.I(className="fas fa-times")],
                                     id={"type": "remove-chart-from-dashboard", "chart_id": chart_id},
@@ -469,7 +570,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                             ]
                         ),
                     ],
-                    className="mb-3",
+                    className=card_class,
                 )
                 
                 current_row.append(dbc.Col(chart_card, width=6))
@@ -925,4 +1026,187 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         
         # 否则保持消息不变，继续运行 Interval
         return dash.no_update, False
+
+    @app.callback(
+        [Output("chart-filter-state", "data", allow_duplicate=True),
+         Output("chart-data-cache", "data", allow_duplicate=True)],
+        [Input({"type": "dashboard-chart", "chart_id": ALL}, "clickData"),
+         Input({"type": "dashboard-chart", "chart_id": ALL}, "selectedData")],
+        [State("current-dashboard-config", "data"),
+         State("chart-filter-state", "data"),
+         State("chart-data-cache", "data")],
+        prevent_initial_call=True
+    )
+    def handle_chart_click(click_data_list, selected_data_list, dashboard_config, current_filter, data_cache):
+        """处理图表点击事件，设置筛选条件"""
+        ctx = callback_context
+        if not ctx.triggered or not dashboard_config:
+            return dash.no_update, dash.no_update
+        
+        # 找到被点击的图表
+        triggered_id = ctx.triggered[0]["prop_id"]
+        if not triggered_id or triggered_id == ".":
+            return dash.no_update, dash.no_update
+        
+        try:
+            # 解析图表ID
+            chart_id_str = triggered_id.split(".")[0]
+            chart_id_dict = json.loads(chart_id_str)
+            source_chart_id = chart_id_dict.get("chart_id")
+            
+            if not source_chart_id:
+                return dash.no_update, dash.no_update
+            
+            # 获取被点击图表的索引
+            chart_ids = dashboard_config.get('chart_ids', [])
+            if source_chart_id not in chart_ids:
+                return dash.no_update, dash.no_update
+            
+            chart_index = chart_ids.index(source_chart_id)
+            click_data = click_data_list[chart_index] if chart_index < len(click_data_list) else None
+            
+            # 如果点击的是已筛选的源图表，清除筛选（再次点击源图表清除筛选）
+            if current_filter and current_filter.get('source_chart_id') == source_chart_id and click_data:
+                return None, dash.no_update
+            
+            if not click_data:
+                return dash.no_update, dash.no_update
+            
+            # 从点击数据中提取筛选字段和值
+            filter_field = None
+            filter_value = None
+            
+            # Plotly 点击数据结构：{'points': [{'x': value, 'y': value, 'customdata': ..., ...}]}
+            points = click_data.get('points', [])
+            if points:
+                point = points[0]
+                
+                # 获取图表配置以确定字段
+                charts = config_manager.load_charts()
+                chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+                chart_config = chart_map.get(source_chart_id)
+                
+                if chart_config:
+                    chart_type = chart_config.get('type', 'line')
+                    x_field = chart_config.get('x')
+                    y_field = chart_config.get('y')
+                    group_field = chart_config.get('group')
+                    
+                    # 根据图表类型和点击位置确定筛选字段
+                    if chart_type in ['bar', 'line', 'combo']:
+                        # 对于柱状图和折线图，通常点击 X 轴值进行筛选
+                        if 'x' in point and point['x'] is not None:
+                            filter_field = x_field
+                            filter_value = point['x']
+                        elif 'label' in point and point['label'] is not None:
+                            filter_field = x_field
+                            filter_value = point['label']
+                        elif 'customdata' in point and point['customdata'] is not None:
+                            # 尝试从 customdata 中获取值
+                            filter_field = x_field
+                            filter_value = point['customdata']
+                    elif chart_type == 'pie':
+                        # 对于饼图，点击的是分类值
+                        if 'label' in point and point['label'] is not None:
+                            filter_field = group_field or x_field
+                            filter_value = point['label']
+                        elif 'x' in point and point['x'] is not None:
+                            filter_field = group_field or x_field
+                            filter_value = point['x']
+                        elif 'customdata' in point and point['customdata'] is not None:
+                            filter_field = group_field or x_field
+                            filter_value = point['customdata']
+                    
+                    # 如果找到了筛选字段和值，设置筛选条件
+                    if filter_field and filter_value is not None:
+                        filter_state = {
+                            "source_chart_id": source_chart_id,
+                            "field": filter_field,
+                            "value": filter_value
+                        }
+                        return filter_state, dash.no_update
+            
+            return dash.no_update, dash.no_update
+            
+        except Exception as e:
+            import traceback
+            print(f"处理图表点击事件时出错: {str(e)}")
+            traceback.print_exc()
+            return dash.no_update, dash.no_update
+
+    @app.callback(
+        [Output("chart-filter-state", "data", allow_duplicate=True),
+         Output("btn-clear-chart-filter", "style", allow_duplicate=True),
+         Output("chart-filter-status", "children", allow_duplicate=True)],
+        [Input("btn-clear-chart-filter", "n_clicks"),
+         Input("chart-filter-state", "data")],
+        prevent_initial_call=True
+    )
+    def update_filter_ui(clear_clicks, filter_state):
+        """更新筛选UI：清除筛选或更新筛选状态显示"""
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update, dash.no_update, dash.no_update
+        
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        
+        # 如果点击了清除按钮
+        if trigger_id == "btn-clear-chart-filter" and clear_clicks:
+            return None, {"display": "none"}, html.Div()
+        
+        # 如果有筛选条件，显示状态和按钮
+        if filter_state:
+            source_chart_id = filter_state.get('source_chart_id')
+            filter_field = filter_state.get('field')
+            filter_value = filter_state.get('value')
+            
+            # 获取源图表名称
+            charts = config_manager.load_charts()
+            chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+            source_chart = chart_map.get(source_chart_id)
+            source_chart_name = source_chart.get('name', source_chart.get('title', '图表')) if source_chart else f"图表 {source_chart_id}"
+            
+            status_badge = dbc.Badge(
+                [
+                    html.I(className="fas fa-filter me-1"),
+                    f"筛选中: {source_chart_name} - {filter_field}={filter_value}",
+                ],
+                color="info",
+                className="ms-2"
+            )
+            return dash.no_update, {"display": "inline-block"}, status_badge
+        
+        # 没有筛选条件
+        return dash.no_update, {"display": "none"}, html.Div()
+    
+    @app.callback(
+        [Output("btn-clear-chart-filter", "style", allow_duplicate=True),
+         Output("chart-filter-status", "children", allow_duplicate=True)],
+        Input("chart-filter-state", "data"),
+        prevent_initial_call='initial_duplicate'
+    )
+    def init_filter_ui(filter_state):
+        """初始化筛选UI显示"""
+        if filter_state:
+            source_chart_id = filter_state.get('source_chart_id')
+            filter_field = filter_state.get('field')
+            filter_value = filter_state.get('value')
+            
+            # 获取源图表名称
+            charts = config_manager.load_charts()
+            chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+            source_chart = chart_map.get(source_chart_id)
+            source_chart_name = source_chart.get('name', source_chart.get('title', '图表')) if source_chart else f"图表 {source_chart_id}"
+            
+            status_badge = dbc.Badge(
+                [
+                    html.I(className="fas fa-filter me-1"),
+                    f"筛选中: {source_chart_name} - {filter_field}={filter_value}",
+                ],
+                color="info",
+                className="ms-2"
+            )
+            return {"display": "inline-block"}, status_badge
+        
+        return {"display": "none"}, html.Div()
 
