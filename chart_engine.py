@@ -203,20 +203,20 @@ class ChartEngine:
             if color_sequence:
                 # 为每个 trace 设置颜色
                 color_map = {str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])}
-                for i, trace in enumerate(fig.data):
-                    if hasattr(trace, 'name') and trace.name:
-                        trace_name_str = str(trace.name)
+                for i, trace in enumerate(fig.data):  # type: ignore
+                    if hasattr(trace, 'name') and trace.name:  # type: ignore
+                        trace_name_str = str(trace.name)  # type: ignore
                         if trace_name_str in color_map:
-                            if hasattr(trace, 'line'):
-                                trace.line.color = color_map[trace_name_str]
-                            elif hasattr(trace, 'marker'):
-                                trace.marker.color = color_map[trace_name_str]
+                            if hasattr(trace, 'line'):  # type: ignore
+                                trace.line.color = color_map[trace_name_str]  # type: ignore
+                            elif hasattr(trace, 'marker'):  # type: ignore
+                                trace.marker.color = color_map[trace_name_str]  # type: ignore
                         elif i < len(color_sequence):
                             # 如果没有匹配，按顺序分配颜色
-                            if hasattr(trace, 'line'):
-                                trace.line.color = color_sequence[i]
-                            elif hasattr(trace, 'marker'):
-                                trace.marker.color = color_sequence[i]
+                            if hasattr(trace, 'line'):  # type: ignore
+                                trace.line.color = color_sequence[i]  # type: ignore
+                            elif hasattr(trace, 'marker'):  # type: ignore
+                                trace.marker.color = color_sequence[i]  # type: ignore
         elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表
@@ -319,20 +319,20 @@ class ChartEngine:
             if color_sequence:
                 # 为每个 trace 设置颜色
                 color_map = {str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])}
-                for i, trace in enumerate(fig.data):
-                    if hasattr(trace, 'name') and trace.name:
-                        trace_name_str = str(trace.name)
+                for i, trace in enumerate(fig.data):  # type: ignore
+                    if hasattr(trace, 'name') and trace.name:  # type: ignore
+                        trace_name_str = str(trace.name)  # type: ignore
                         if trace_name_str in color_map:
-                            if hasattr(trace, 'marker'):
-                                trace.marker.color = color_map[trace_name_str]
-                            elif hasattr(trace, 'line'):
-                                trace.line.color = color_map[trace_name_str]
+                            if hasattr(trace, 'marker'):  # type: ignore
+                                trace.marker.color = color_map[trace_name_str]  # type: ignore
+                            elif hasattr(trace, 'line'):  # type: ignore
+                                trace.line.color = color_map[trace_name_str]  # type: ignore
                         elif i < len(color_sequence):
                             # 如果没有匹配，按顺序分配颜色
-                            if hasattr(trace, 'marker'):
-                                trace.marker.color = color_sequence[i]
-                            elif hasattr(trace, 'line'):
-                                trace.line.color = color_sequence[i]
+                            if hasattr(trace, 'marker'):  # type: ignore
+                                trace.marker.color = color_sequence[i]  # type: ignore
+                            elif hasattr(trace, 'line'):  # type: ignore
+                                trace.line.color = color_sequence[i]  # type: ignore
         elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表且所有元素都是字符串
