@@ -129,6 +129,16 @@ class ConfigManager:
                 return chart
         return None
     
+    def delete_chart(self, chart_id: str) -> bool:
+        """删除图表配置"""
+        charts = self.load_charts()
+        charts = [chart for chart in charts if chart.get('id') != chart_id]
+        
+        with open(self.charts_file, 'w', encoding='utf-8') as f:
+            json.dump({'charts': charts}, f, indent=2, ensure_ascii=False)
+        
+        return True
+    
     # ==========================================
     # 仪表盘配置管理
     # ==========================================

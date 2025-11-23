@@ -201,7 +201,22 @@ class ChartEngine:
                             remaining = len(unique_groups) - len(color_sequence)
             
             if color_sequence:
-                fig.update_layout(color_discrete_map={str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])})
+                # 为每个 trace 设置颜色
+                color_map = {str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])}
+                for i, trace in enumerate(fig.data):
+                    if hasattr(trace, 'name') and trace.name:
+                        trace_name_str = str(trace.name)
+                        if trace_name_str in color_map:
+                            if hasattr(trace, 'line'):
+                                trace.line.color = color_map[trace_name_str]
+                            elif hasattr(trace, 'marker'):
+                                trace.marker.color = color_map[trace_name_str]
+                        elif i < len(color_sequence):
+                            # 如果没有匹配，按顺序分配颜色
+                            if hasattr(trace, 'line'):
+                                trace.line.color = color_sequence[i]
+                            elif hasattr(trace, 'marker'):
+                                trace.marker.color = color_sequence[i]
         elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表
@@ -209,15 +224,15 @@ class ChartEngine:
                 colors = list(colors) if hasattr(colors, '__iter__') else [colors]
             colors = [str(c) for c in colors if c]
             if group:
-                # 对于分组图表，确保每个组使用不同颜色
+                # 对于分组图表，使用 colorway 设置默认颜色序列
                 unique_groups = data[group].unique() if group in data.columns else []
                 num_groups = len(unique_groups)
                 # 如果分组数量超过颜色数量，扩展颜色列表（循环使用）
                 if num_groups > len(colors):
                     extended_colors = (colors * ((num_groups // len(colors)) + 1))[:num_groups]
                     colors = extended_colors
-                # 使用 color_discrete_sequence 确保每个组颜色不同
-                fig.update_layout(color_discrete_sequence=colors[:num_groups] if num_groups > 0 else colors)
+                # 使用 colorway 确保每个组颜色不同
+                fig.update_layout(colorway=colors[:num_groups] if num_groups > 0 else colors)
             else:
                 # 对于单线条图表，直接设置颜色
                 if colors:
@@ -302,7 +317,22 @@ class ChartEngine:
                             break
             
             if color_sequence:
-                fig.update_layout(color_discrete_map={str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])})
+                # 为每个 trace 设置颜色
+                color_map = {str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])}
+                for i, trace in enumerate(fig.data):
+                    if hasattr(trace, 'name') and trace.name:
+                        trace_name_str = str(trace.name)
+                        if trace_name_str in color_map:
+                            if hasattr(trace, 'marker'):
+                                trace.marker.color = color_map[trace_name_str]
+                            elif hasattr(trace, 'line'):
+                                trace.line.color = color_map[trace_name_str]
+                        elif i < len(color_sequence):
+                            # 如果没有匹配，按顺序分配颜色
+                            if hasattr(trace, 'marker'):
+                                trace.marker.color = color_sequence[i]
+                            elif hasattr(trace, 'line'):
+                                trace.line.color = color_sequence[i]
         elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表且所有元素都是字符串
@@ -310,15 +340,15 @@ class ChartEngine:
                 colors = list(colors) if hasattr(colors, '__iter__') else [colors]
             colors = [str(c) for c in colors if c]
             if group:
-                # 对于分组图表，确保每个组使用不同颜色
+                # 对于分组图表，使用 colorway 设置默认颜色序列
                 unique_groups = data[group].unique() if group in data.columns else []
                 num_groups = len(unique_groups)
                 # 如果分组数量超过颜色数量，扩展颜色列表（循环使用）
                 if num_groups > len(colors):
                     extended_colors = (colors * ((num_groups // len(colors)) + 1))[:num_groups]
                     colors = extended_colors
-                # 使用 color_discrete_sequence 确保每个组颜色不同
-                fig.update_layout(color_discrete_sequence=colors[:num_groups] if num_groups > 0 else colors)
+                # 使用 colorway 确保每个组颜色不同
+                fig.update_layout(colorway=colors[:num_groups] if num_groups > 0 else colors)
             else:
                 # 对于单柱状图，设置 marker color（必须是颜色字符串）
                 if colors:

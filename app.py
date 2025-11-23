@@ -856,6 +856,39 @@ def create_chart_designer_page():
                         width=3,
                     ),
                     
+                    # 中间：已保存图表管理
+                    dbc.Col(
+                        [
+                            dbc.Card(
+                                [
+                                    dbc.CardHeader(
+                                        [
+                                            html.Span("已保存图表", className="me-auto"),
+                                            dbc.Button(
+                                                [html.I(className="fas fa-sync me-1"), "刷新"],
+                                                id="btn-refresh-saved-charts",
+                                                color="link",
+                                                size="sm",
+                                                className="p-0"
+                                            ),
+                                        ],
+                                        className="d-flex justify-content-between align-items-center",
+                                    ),
+                                    dbc.CardBody(
+                                        [
+                                            html.Div(id="saved-charts-list", children=[
+                                                html.P("加载中...", className="text-muted text-center py-3"),
+                                            ]),
+                                        ]
+                                    ),
+                                ],
+                                className="mb-3",
+                                style={"max-height": "600px", "overflow-y": "auto"},
+                            ),
+                        ],
+                        width=3,
+                    ),
+                    
                     # 右侧：图表预览
                     dbc.Col(
                         [
@@ -879,6 +912,7 @@ def create_chart_designer_page():
                                             # 保存当前图表配置的Store
                                             dcc.Store(id="current-chart-config", data=None),
                                             dcc.Store(id="current-chart-figure", data=None),
+                                            dcc.Store(id="editing-chart-id", data=None),  # 当前正在编辑的图表ID
                                             html.Div(id="chart-save-status", children=[], className="mb-2"),
                                             html.Div(id="chart-preview", children=[
                                                 html.P("请选择数据源并配置字段以生成预览", className="text-muted text-center py-5"),
@@ -889,7 +923,7 @@ def create_chart_designer_page():
                                 style={"height": "100%"},
                             ),
                         ],
-                        width=9,
+                        width=6,
                     ),
                 ]
             ),
@@ -1807,6 +1841,162 @@ def load_chart_datasource_options(pathname):
         return options, selected
     return [], None
 
+@app.callback(
+    Output("saved-charts-list", "children"),
+    [Input("url", "pathname"),
+     Input("btn-refresh-saved-charts", "n_clicks")],
+    prevent_initial_call=False
+)
+def load_saved_charts_list(pathname, refresh_clicks):
+    """加载已保存的图表列表"""
+    if pathname != "/chart-designer":
+        return dash.no_update
+    
+    charts = config_manager.load_charts()
+    return _generate_chart_cards(charts)
+
+@app.callback(
+    [Output("editing-chart-id", "data", allow_duplicate=True),
+     Output("chart-datasource-select", "value", allow_duplicate=True),
+     Output("chart-type", "value", allow_duplicate=True),
+     Output("chart-field-assignments", "data", allow_duplicate=True),
+     Output("agg-function", "value", allow_duplicate=True),
+     Output("chart-title", "value", allow_duplicate=True),
+     Output("color-theme", "value", allow_duplicate=True),
+     Output("chart-options", "value", allow_duplicate=True),
+     Output("custom-colors-config", "data", allow_duplicate=True),
+     Output("table-orientation", "value", allow_duplicate=True),
+     Output("chart-save-status", "children", allow_duplicate=True)],
+    [Input({"type": "edit-saved-chart", "chart_id": ALL}, "n_clicks")],
+    prevent_initial_call=True
+)
+def load_chart_for_edit(edit_clicks):
+    """加载图表配置到设计器（编辑）"""
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"]
+    
+    # 提取图表ID
+    import json
+    try:
+        # 只处理编辑按钮的点击事件
+        if "edit-saved-chart" not in trigger_id:
+            # 不是编辑操作，返回所有 no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
+        chart_id_dict = json.loads(trigger_id.split(".")[0])
+        chart_id = chart_id_dict.get("chart_id")
+        
+        chart_config = config_manager.get_chart(chart_id)
+        if not chart_config:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dbc.Alert("图表不存在", color="danger", className="m-2")
+        
+        # 编辑模式：加载配置到设计器
+        # 恢复字段配置
+        assignments = default_chart_assignments()
+        assignments['x'] = chart_config.get('x')
+        y_value = chart_config.get('y')
+        if isinstance(y_value, list):
+            assignments['y'] = y_value
+        elif y_value:
+            assignments['y'] = [y_value]
+        assignments['group'] = chart_config.get('group')
+        assignments['table_columns'] = chart_config.get('table_columns', [])
+        assignments['table_rows'] = chart_config.get('table_rows', [])
+        table_orientation = chart_config.get('table_orientation', 'horizontal')
+        assignments['table_orientation'] = table_orientation
+        
+        # 恢复选项
+        options = []
+        if chart_config.get('show_labels', False):
+            options.append('show-labels')
+        if chart_config.get('show_legend', True):
+            options.append('show-legend')
+        
+        return (
+            chart_id,  # editing-chart-id
+            chart_config.get('datasource_id'),  # chart-datasource-select
+            chart_config.get('type', 'line'),  # chart-type
+            assignments,  # chart-field-assignments
+            chart_config.get('agg_function', 'sum'),  # agg-function
+            chart_config.get('title', chart_config.get('name', '')),  # chart-title
+            chart_config.get('color_theme', 'default'),  # color-theme
+            options,  # chart-options
+            chart_config.get('custom_colors', {}),  # custom-colors-config
+            table_orientation,  # table-orientation
+            dbc.Alert("图表配置已加载，可以开始编辑", color="success", className="m-2")
+        )
+    except Exception as e:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dbc.Alert(f"加载图表失败：{str(e)}", color="danger", className="m-2")
+    
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+@app.callback(
+    [Output("saved-charts-list", "children", allow_duplicate=True),
+     Output("chart-save-status", "children", allow_duplicate=True)],
+    Input({"type": "delete-saved-chart", "chart_id": ALL}, "n_clicks"),
+    prevent_initial_call=True
+)
+def delete_saved_chart(delete_clicks):
+    """删除已保存的图表"""
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"]
+    trigger_value = ctx.triggered[0]["value"]
+    
+    # 检查是否是有效的点击（n_clicks 必须大于 0）
+    # 如果 n_clicks 是 None 或 0，可能是列表刷新导致的，不应该删除
+    if trigger_value is None:
+        return dash.no_update, dash.no_update
+    
+    # 提取图表ID
+    import json
+    try:
+        if "delete-saved-chart" in trigger_id:
+            chart_id_dict = json.loads(trigger_id.split(".")[0])
+            chart_id = chart_id_dict.get("chart_id")
+            
+            # 验证确实有有效的点击
+            if isinstance(trigger_value, list):
+                # 找到哪个按钮被点击了（n_clicks > 0）
+                clicked_indices = []
+                for i, v in enumerate(trigger_value):
+                    if v is not None and isinstance(v, (int, float)) and v > 0:
+                        clicked_indices.append(i)
+                
+                if not clicked_indices:
+                    # 没有有效的点击，可能是列表刷新导致的
+                    return dash.no_update, dash.no_update
+                
+                # 获取所有图表列表，找到对应的图表ID
+                charts = config_manager.load_charts()
+                clicked_index = clicked_indices[0]
+                if clicked_index >= len(charts):
+                    return dash.no_update, dash.no_update
+                clicked_chart = charts[clicked_index]
+                if clicked_chart.get('id') != chart_id:
+                    return dash.no_update, dash.no_update
+            
+            chart_config = config_manager.get_chart(chart_id)
+            if chart_config:
+                chart_name = chart_config.get('name', '未命名图表')
+                config_manager.delete_chart(chart_id)
+                
+                # 刷新列表
+                charts = config_manager.load_charts()
+                charts_list = _generate_chart_cards(charts)
+                
+                return charts_list, dbc.Alert(f"图表 '{chart_name}' 已删除", color="success", className="m-2")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return dash.no_update, dbc.Alert(f"删除失败：{str(e)}", color="danger", className="m-2")
+    
+    return dash.no_update, dash.no_update
 
 @app.callback(
     [Output("field-list", "children"),
@@ -2434,9 +2624,84 @@ def update_chart_preview(datasource_id, chart_type, assignments, agg_function, t
     except Exception as e:
         return dbc.Alert(f"生成图表失败：{str(e)}", color="danger")
 
+def _generate_chart_cards(charts):
+    """生成图表卡片列表的辅助函数"""
+    if not charts:
+        return html.P("暂无已保存的图表", className="text-muted text-center py-3")
+    
+    chart_cards = []
+    chart_type_names = {
+        'line': '折线图',
+        'bar': '柱状图',
+        'pie': '饼图',
+        'table': '表格',
+        'combo': '组合图'
+    }
+    
+    for chart in charts:
+        chart_id_item = chart.get('id')
+        chart_name_item = chart.get('name', chart.get('title', '未命名图表'))
+        chart_type_item = chart.get('type', 'line')
+        chart_type_name = chart_type_names.get(chart_type_item, chart_type_item)
+        created_at = chart.get('created_at', '')
+        
+        try:
+            if created_at:
+                created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                created_str = created_dt.strftime('%Y-%m-%d %H:%M')
+            else:
+                created_str = '未知'
+        except:
+            created_str = created_at[:16] if created_at else '未知'
+        
+        chart_card = dbc.Card(
+            [
+                dbc.CardBody(
+                    [
+                        html.Div(
+                            [
+                                html.H6(chart_name_item, className="mb-1 fw-bold"),
+                                html.P(f"类型: {chart_type_name}", className="mb-1 small text-muted"),
+                                html.P(f"创建: {created_str}", className="mb-2 small text-muted"),
+                            ],
+                            className="mb-2"
+                        ),
+                        dbc.ButtonGroup(
+                            [
+                                dbc.Button(
+                                    [html.I(className="fas fa-edit me-1"), "编辑"],
+                                    id={"type": "edit-saved-chart", "chart_id": chart_id_item},
+                                    color="primary",
+                                    size="sm",
+                                    className="flex-fill"
+                                ),
+                                dbc.Button(
+                                    [html.I(className="fas fa-trash me-1"), "删除"],
+                                    id={"type": "delete-saved-chart", "chart_id": chart_id_item},
+                                    color="danger",
+                                    size="sm",
+                                    className="flex-fill"
+                                ),
+                            ],
+                            className="w-100",
+                            vertical=False,
+                        ),
+                    ],
+                    className="p-2"
+                ),
+            ],
+            className="mb-2",
+            style={"border": "1px solid #dee2e6", "borderRadius": "6px"}
+        )
+        chart_cards.append(chart_card)
+    
+    return html.Div(chart_cards)
+
 @app.callback(
     [Output("current-chart-config", "data", allow_duplicate=True),
-     Output("chart-save-status", "children", allow_duplicate=True)],
+     Output("chart-save-status", "children", allow_duplicate=True),
+     Output("saved-charts-list", "children", allow_duplicate=True),
+     Output("editing-chart-id", "data", allow_duplicate=True)],
     [Input("btn-save-chart", "n_clicks")],
     [State("chart-datasource-select", "value"),
      State("chart-type", "value"),
@@ -2445,28 +2710,29 @@ def update_chart_preview(datasource_id, chart_type, assignments, agg_function, t
      State("chart-title", "value"),
      State("color-theme", "value"),
      State("chart-options", "value"),
-     State("custom-colors-config", "data")],
+     State("custom-colors-config", "data"),
+     State("editing-chart-id", "data")],
     prevent_initial_call=True
 )
-def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors):
+def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors, editing_id):
     """保存图表配置"""
     if not datasource_id:
-        return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2")
+        return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2"), dash.no_update, dash.no_update
     try:
         ds_config = config_manager.get_datasource(datasource_id)
         if not ds_config:
-            return dash.no_update, dbc.Alert("数据源不存在", color="warning", className="m-2")
+            return dash.no_update, dbc.Alert("数据源不存在", color="warning", className="m-2"), dash.no_update, dash.no_update
         adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
         df = adapter.fetch_data(limit=1000)
         if df is None or df.empty:
-            return dash.no_update, dbc.Alert("数据为空", color="warning", className="m-2")
+            return dash.no_update, dbc.Alert("数据为空", color="warning", className="m-2"), dash.no_update, dash.no_update
         assignments = assignments or default_chart_assignments()
         x_field = assignments.get('x')
         y_fields = assignments.get('y') or []
         if chart_type != 'table' and not x_field and chart_type != 'pie':
-            return dash.no_update, dbc.Alert("请将字段拖拽到 X 轴", color="warning", className="m-2")
-        if not y_fields:
-            return dash.no_update, dbc.Alert("请至少选择一个 Y 轴字段", color="warning", className="m-2")
+            return dash.no_update, dbc.Alert("请将字段拖拽到 X 轴", color="warning", className="m-2"), dash.no_update, dash.no_update
+        if not y_fields and chart_type != 'table':
+            return dash.no_update, dbc.Alert("请至少选择一个 Y 轴字段", color="warning", className="m-2"), dash.no_update, dash.no_update
         options = options or []
         chart_config = {
             "datasource_id": datasource_id,
@@ -2481,11 +2747,38 @@ def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function
             "show_legend": "show-legend" in options,
             "agg_function": agg_function or "sum",
         }
+        
+        # 如果是表格类型，添加表格相关配置
+        if chart_type == 'table':
+            chart_config['table_columns'] = assignments.get('table_columns', [])
+            chart_config['table_rows'] = assignments.get('table_rows', [])
+            chart_config['table_orientation'] = assignments.get('table_orientation', 'horizontal')
+        
         chart_config['name'] = title or "未命名图表"
+        
+        # 每次保存都创建新图表，不覆盖现有图表
+        # 移除 chart_config 中的 id，让 save_chart 自动生成新ID
+        if 'id' in chart_config:
+            del chart_config['id']
+        
+        # 保存图表并获取保存后的配置（包含生成的ID）
         config_manager.save_chart(chart_config)
-        return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2")
+        
+        # 重新加载列表获取最新添加的图表
+        charts = config_manager.load_charts()
+        if charts:
+            # 获取最后添加的图表（应该是最新的）
+            chart_config = charts[-1]
+        
+        # 刷新已保存图表列表
+        charts_list = _generate_chart_cards(charts)
+        
+        # 保存成功后，清除编辑ID（因为创建了新图表）
+        new_editing_id = None
+        
+        return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2"), charts_list, new_editing_id
     except Exception as e:
-        return dash.no_update, dbc.Alert(f"保存图表失败：{str(e)}", color="danger", className="m-2")
+        return dash.no_update, dbc.Alert(f"保存图表失败：{str(e)}", color="danger", className="m-2"), dash.no_update, dash.no_update
 
 @app.callback(
     Output("chart-save-status", "children", allow_duplicate=True),
