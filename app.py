@@ -902,66 +902,49 @@ def create_chart_designer_page():
 # ==========================================
 def create_dashboard_page():
     """创建仪表盘页面"""
-    # 尝试从已保存的仪表盘加载图表，如果没有则使用示例数据
-    dashboards = config_manager.load_dashboards()
-    charts = config_manager.load_charts()
-    
-    # 如果有已保存的图表，使用它们
-    if charts:
-        # 稍后通过回调动态加载
-        return create_dashboard_page_content(dynamic=True)
-    else:
-        # 使用示例数据
-        return create_dashboard_page_content(dynamic=False)
-
-def create_dashboard_page_content(dynamic=False):
-    """创建仪表盘页面内容"""
-    # 创建示例图表数据
-    sample_data = pd.DataFrame({
-        'date': pd.date_range('2025-01-01', periods=10),
-        'value': [10, 12, 15, 13, 18, 20, 17, 19, 22, 21],
-        'category': ['A', 'A', 'A', 'B', 'B', 'B', 'C', 'C', 'C', 'A']
-    })
-    
-    # 折线图示例
-    fig_line = px.line(sample_data, x='date', y='value', title='销售额趋势', markers=True)
-    fig_line.update_layout(template='plotly_white', height=300)
-    
-    # 柱状图示例
-    fig_bar = px.bar(sample_data.groupby('category')['value'].sum().reset_index(), 
-                     x='category', y='value', title='分类销售额对比')
-    fig_bar.update_layout(template='plotly_white', height=300)
-    
-    # 饼图示例
-    fig_pie = px.pie(sample_data.groupby('category')['value'].sum().reset_index(),
-                     values='value', names='category', title='分类占比')
-    fig_pie.update_layout(template='plotly_white', height=300)
-    
     return dbc.Container(
         [
+            # Store组件：存储当前选中的仪表盘ID和仪表盘配置
+            dcc.Store(id="current-dashboard-id", data=None),
+            dcc.Store(id="current-dashboard-config", data=None),
+            dcc.Store(id="dashboard-refresh-trigger", data=0),
+            
             # 顶部工具栏
             dbc.Row(
                 [
                     dbc.Col(
                         [
-                            html.H2("我的仪表盘", className="mb-0"),
+                            html.Div([
+                                html.H2(id="dashboard-title", children="我的仪表盘", className="mb-0 d-inline-block me-3"),
+                                dbc.Select(
+                                    id="dashboard-selector",
+                                    placeholder="选择或创建仪表盘...",
+                                    className="d-inline-block",
+                                    style={"width": "300px", "verticalAlign": "middle"},
+                                ),
+                            ]),
                         ],
-                        width=6,
+                        width=8,
                     ),
                     dbc.Col(
                         [
                             dbc.ButtonGroup(
                                 [
-                                    dbc.Button([html.I(className="fas fa-plus me-1"), "新建仪表盘"], color="primary", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-edit me-1"), "编辑"], color="secondary", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-download me-1"), "导出"], color="success", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), "新建仪表盘"], 
+                                              id="btn-new-dashboard", color="primary", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-edit me-1"), "编辑"], 
+                                              id="btn-edit-dashboard", color="secondary", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-trash me-1"), "删除"], 
+                                              id="btn-delete-dashboard", color="danger", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
+                                              id="btn-add-chart-to-dashboard", color="success", size="sm"),
                                     dbc.DropdownMenu(
                                         [
-                                            dbc.DropdownMenuItem("导出为 PNG", id="export-png"),
-                                            dbc.DropdownMenuItem("导出为 PDF", id="export-pdf"),
-                                            dbc.DropdownMenuItem("导出为 HTML", id="export-html"),
+                                            dbc.DropdownMenuItem("导出为 PNG", id="btn-export-dashboard-png"),
+                                            dbc.DropdownMenuItem("导出为 PDF", id="btn-export-dashboard-pdf"),
+                                            dbc.DropdownMenuItem("导出为 HTML", id="btn-export-dashboard-html"),
                                         ],
-                                        label="更多",
+                                        label="导出",
                                         size="sm",
                                         color="info",
                                     ),
@@ -969,7 +952,7 @@ def create_dashboard_page_content(dynamic=False):
                                 className="float-end",
                             ),
                         ],
-                        width=6,
+                        width=4,
                     ),
                 ],
                 className="mb-4",
@@ -1014,108 +997,55 @@ def create_dashboard_page_content(dynamic=False):
                 className="mb-4",
             ),
             
-            # 图表网格布局
-            dbc.Row(
+            # 仪表盘图表区域
+            html.Div(id="dashboard-charts-container", children=[
+                html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+            ]),
+            
+            # 新建/编辑仪表盘模态框
+            dbc.Modal(
                 [
-                    dbc.Col(
+                    dbc.ModalHeader(id="dashboard-modal-header", children="新建仪表盘"),
+                    dbc.ModalBody(
                         [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader(
-                                        [
-                                            html.Span("销售额趋势", className="me-auto"),
-                                            dbc.ButtonGroup(
-                                                [
-                                                    dbc.Button(html.I(className="fas fa-ellipsis-v"), color="link", size="sm"),
-                                                ],
-                                                className="float-end",
-                                            ),
-                                        ],
-                                        className="d-flex justify-content-between align-items-center",
-                                    ),
-                                    dbc.CardBody(
-                                        [
-                                            dcc.Graph(figure=fig_line, id="chart-1"),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
-                        ],
-                        width=6,
+                            html.Label("仪表盘名称", className="form-label"),
+                            dbc.Input(id="dashboard-name-input", placeholder="请输入仪表盘名称", className="mb-3"),
+                            html.Label("描述", className="form-label"),
+                            dbc.Textarea(id="dashboard-description-input", placeholder="请输入描述（可选）", rows=3),
+                        ]
                     ),
-                    dbc.Col(
+                    dbc.ModalFooter(
                         [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader(
-                                        [
-                                            html.Span("分类销售额对比", className="me-auto"),
-                                            dbc.ButtonGroup(
-                                                [
-                                                    dbc.Button(html.I(className="fas fa-ellipsis-v"), color="link", size="sm"),
-                                                ],
-                                                className="float-end",
-                                            ),
-                                        ],
-                                        className="d-flex justify-content-between align-items-center",
-                                    ),
-                                    dbc.CardBody(
-                                        [
-                                            dcc.Graph(figure=fig_bar, id="chart-2"),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
-                        ],
-                        width=6,
+                            dbc.Button("取消", id="btn-cancel-dashboard-modal", color="secondary", className="me-2"),
+                            dbc.Button("保存", id="btn-save-dashboard-modal", color="primary"),
+                        ]
                     ),
-                ]
+                ],
+                id="modal-dashboard",
+                is_open=False,
+                size="lg",
             ),
             
-            dbc.Row(
+            # 添加图表到仪表盘模态框
+            dbc.Modal(
                 [
-                    dbc.Col(
+                    dbc.ModalHeader("添加图表到仪表盘"),
+                    dbc.ModalBody(
                         [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("分类占比"),
-                                    dbc.CardBody(
-                                        [
-                                            dcc.Graph(figure=fig_pie, id="chart-3"),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
-                        ],
-                        width=4,
+                            html.Label("选择图表", className="form-label"),
+                            dbc.Select(id="chart-selector-for-dashboard", className="mb-3"),
+                            html.Div(id="dashboard-add-chart-status", children=[]),
+                        ]
                     ),
-                    dbc.Col(
+                    dbc.ModalFooter(
                         [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("数据明细表"),
-                                    dbc.CardBody(
-                                        [
-                                            create_table_from_dataframe(
-                                                sample_data.head(10),
-                                                striped=True,
-                                                bordered=True,
-                                                hover=True,
-                                                responsive=True,
-                                                className="table-sm",
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
-                        ],
-                        width=8,
+                            dbc.Button("取消", id="btn-cancel-add-chart", color="secondary", className="me-2"),
+                            dbc.Button("添加", id="btn-confirm-add-chart", color="primary"),
+                        ]
                     ),
-                ]
+                ],
+                id="modal-add-chart-to-dashboard",
+                is_open=False,
             ),
         ],
         fluid=True,
@@ -2652,6 +2582,480 @@ def toggle_custom_date_range(filter_value):
     if filter_value == "custom":
         return {"display": "block"}
     return {"display": "none"}
+
+# ==========================================
+# 仪表盘回调函数
+# ==========================================
+
+@app.callback(
+    [Output("dashboard-selector", "options"),
+     Output("dashboard-selector", "value")],
+    [Input("url", "pathname"),
+     Input("dashboard-refresh-trigger", "data")],
+    prevent_initial_call=False
+)
+def load_dashboard_list(pathname, refresh_trigger):
+    """加载仪表盘列表"""
+    if pathname == "/dashboard":
+        dashboards = config_manager.load_dashboards()
+        options = [
+            {"label": db.get('name', '未命名仪表盘'), "value": db.get('id')}
+            for db in dashboards if db.get('id')
+        ]
+        selected = options[0]["value"] if options else None
+        if not options:
+            options = [{"label": "暂无仪表盘，请创建", "value": None, "disabled": True}]
+        return options, selected
+    return [], None
+
+@app.callback(
+    [Output("current-dashboard-id", "data"),
+     Output("current-dashboard-config", "data"),
+     Output("dashboard-title", "children")],
+    Input("dashboard-selector", "value"),
+    prevent_initial_call=False
+)
+def select_dashboard(dashboard_id):
+    """选择仪表盘"""
+    if not dashboard_id:
+        return None, None, "我的仪表盘"
+    
+    dashboard = config_manager.get_dashboard(dashboard_id)
+    if dashboard:
+        return dashboard_id, dashboard, dashboard.get('name', '我的仪表盘')
+    return None, None, "我的仪表盘"
+
+@app.callback(
+    Output("dashboard-charts-container", "children"),
+    [Input("current-dashboard-config", "data"),
+     Input("time-filter", "value"),
+     Input("start-date", "date"),
+     Input("end-date", "date")],
+    prevent_initial_call=False
+)
+def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date):
+    """渲染仪表盘中的图表"""
+    if not dashboard_config:
+        return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")
+    
+    chart_ids = dashboard_config.get('chart_ids', [])
+    if not chart_ids:
+        return html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
+    
+    charts = config_manager.load_charts()
+    chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+    
+    rows = []
+    current_row = []
+    
+    for i, chart_id in enumerate(chart_ids):
+        chart_config = chart_map.get(chart_id)
+        if not chart_config:
+            continue
+        
+        # 获取图表配置
+        datasource_id = chart_config.get('datasource_id')
+        chart_type = chart_config.get('type', 'line')
+        
+        if not datasource_id:
+            continue
+        
+        try:
+            # 加载数据
+            ds_config = config_manager.get_datasource(datasource_id)
+            if not ds_config:
+                continue
+            
+            adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+            df = adapter.fetch_data(limit=1000)
+            
+            if df is None or df.empty:
+                continue
+            
+            # 应用时间筛选（如果有时间字段）
+            if time_filter and time_filter != "custom":
+                # 这里可以根据实际需求实现时间筛选逻辑
+                pass
+            
+            # 生成图表
+            chart_config_for_engine = {
+                "type": chart_type,
+                "x": chart_config.get('x'),
+                "y": chart_config.get('y'),
+                "group": chart_config.get('group'),
+                "title": chart_config.get('title', chart_config.get('name', '图表')),
+                "color_theme": chart_config.get('color_theme', 'default'),
+                "custom_colors": chart_config.get('custom_colors', {}),
+                "show_labels": chart_config.get('show_labels', False),
+                "show_legend": chart_config.get('show_legend', True),
+                "agg_function": chart_config.get('agg_function', 'sum'),
+            }
+            
+            fig = chart_engine.create_chart(df, chart_config_for_engine)
+            
+            # 确定图表宽度（可以根据配置或默认值）
+            chart_width = chart_config.get('width', 6)  # 默认6列（Bootstrap 12列系统）
+            
+            chart_card = dbc.Col(
+                [
+                    dbc.Card(
+                        [
+                            dbc.CardHeader(
+                                [
+                                    html.Span(chart_config.get('title', chart_config.get('name', '图表')), className="me-auto"),
+                                    dbc.ButtonGroup(
+                                        [
+                                            dbc.Button(
+                                                html.I(className="fas fa-times"),
+                                                id={"type": "remove-chart-from-dashboard", "chart_id": chart_id},
+                                                color="link",
+                                                size="sm",
+                                                className="text-danger"
+                                            ),
+                                        ],
+                                        className="float-end",
+                                    ),
+                                ],
+                                className="d-flex justify-content-between align-items-center",
+                            ),
+                            dbc.CardBody(
+                                [
+                                    dcc.Graph(figure=fig, id={"type": "dashboard-chart", "chart_id": chart_id}),
+                                ]
+                            ),
+                        ],
+                        className="mb-3",
+                    ),
+                ],
+                width=chart_width,
+            )
+            
+            current_row.append(chart_card)
+            
+            # 每行最多12列，如果当前行已满或这是最后一个图表，创建新行
+            if sum(c.width for c in current_row) >= 12 or i == len(chart_ids) - 1:
+                rows.append(dbc.Row(current_row, className="mb-3"))
+                current_row = []
+        
+        except Exception as e:
+            # 如果图表生成失败，显示错误信息
+            error_card = dbc.Col(
+                [
+                    dbc.Alert(f"图表加载失败：{str(e)}", color="danger"),
+                ],
+                width=12,
+            )
+            current_row.append(error_card)
+            if sum(c.width for c in current_row) >= 12:
+                rows.append(dbc.Row(current_row, className="mb-3"))
+                current_row = []
+    
+    if not rows:
+        return html.P("无法加载图表，请检查数据源配置", className="text-muted text-center py-5")
+    
+    return rows
+
+@app.callback(
+    [Output("modal-dashboard", "is_open"),
+     Output("dashboard-modal-header", "children"),
+     Output("dashboard-name-input", "value"),
+     Output("dashboard-description-input", "value")],
+    [Input("btn-new-dashboard", "n_clicks"),
+     Input("btn-edit-dashboard", "n_clicks"),
+     Input("btn-cancel-dashboard-modal", "n_clicks"),
+     Input("btn-save-dashboard-modal", "n_clicks")],
+    [State("modal-dashboard", "is_open"),
+     State("current-dashboard-config", "data"),
+     State("dashboard-name-input", "value"),
+     State("dashboard-description-input", "value")],
+    prevent_initial_call=True
+)
+def toggle_dashboard_modal(new_clicks, edit_clicks, cancel_clicks, save_clicks, is_open, current_dashboard, name, description):
+    """打开/关闭仪表盘编辑模态框"""
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if trigger_id in ["btn-new-dashboard", "btn-edit-dashboard"]:
+        if trigger_id == "btn-new-dashboard":
+            return True, "新建仪表盘", "", ""
+        else:
+            if current_dashboard:
+                return True, "编辑仪表盘", current_dashboard.get('name', ''), current_dashboard.get('description', '')
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    
+    elif trigger_id == "btn-cancel-dashboard-modal":
+        return False, dash.no_update, dash.no_update, dash.no_update
+    
+    elif trigger_id == "btn-save-dashboard-modal":
+        return False, dash.no_update, dash.no_update, dash.no_update
+    
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+@app.callback(
+    [Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
+     Output("current-dashboard-id", "data", allow_duplicate=True),
+     Output("current-dashboard-config", "data", allow_duplicate=True)],
+    Input("btn-save-dashboard-modal", "n_clicks"),
+    [State("current-dashboard-id", "data"),
+     State("dashboard-name-input", "value"),
+     State("dashboard-description-input", "value")],
+    prevent_initial_call=True
+)
+def save_dashboard(save_clicks, current_id, name, description):
+    """保存仪表盘"""
+    if not name:
+        return dash.no_update, dash.no_update, dash.no_update
+    
+    dashboard_config = {
+        "name": name,
+        "description": description or "",
+        "chart_ids": [],
+    }
+    
+    if current_id:
+        dashboard_config["id"] = current_id
+        existing = config_manager.get_dashboard(current_id)
+        if existing:
+            dashboard_config["chart_ids"] = existing.get('chart_ids', [])
+    
+    config_manager.save_dashboard(dashboard_config)
+    saved_id = dashboard_config.get('id')
+    
+    # 刷新仪表盘列表
+    return dash.callback_context.triggered[0]["value"] + 1 if dash.callback_context.triggered else 1, saved_id, dashboard_config
+
+@app.callback(
+    [Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
+     Output("current-dashboard-id", "data", allow_duplicate=True),
+     Output("current-dashboard-config", "data", allow_duplicate=True)],
+    Input("btn-delete-dashboard", "n_clicks"),
+    State("current-dashboard-id", "data"),
+    prevent_initial_call=True
+)
+def delete_dashboard(delete_clicks, dashboard_id):
+    """删除仪表盘"""
+    if not dashboard_id:
+        return dash.no_update, dash.no_update, dash.no_update
+    
+    dashboards = config_manager.load_dashboards()
+    dashboards = [db for db in dashboards if db.get('id') != dashboard_id]
+    
+    with open(config_manager.dashboards_file, 'w', encoding='utf-8') as f:
+        json.dump({'dashboards': dashboards}, f, indent=2, ensure_ascii=False)
+    
+    return dash.callback_context.triggered[0]["value"] + 1 if dash.callback_context.triggered else 1, None, None
+
+@app.callback(
+    [Output("modal-add-chart-to-dashboard", "is_open"),
+     Output("chart-selector-for-dashboard", "options")],
+    [Input("btn-add-chart-to-dashboard", "n_clicks"),
+     Input("btn-cancel-add-chart", "n_clicks"),
+     Input("btn-confirm-add-chart", "n_clicks")],
+    [State("modal-add-chart-to-dashboard", "is_open"),
+     State("chart-selector-for-dashboard", "value"),
+     State("current-dashboard-config", "data")],
+    prevent_initial_call=True
+)
+def toggle_add_chart_modal(add_clicks, cancel_clicks, confirm_clicks, is_open, selected_chart_id, dashboard_config):
+    """打开/关闭添加图表模态框"""
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if trigger_id == "btn-add-chart-to-dashboard":
+        # 加载图表列表
+        charts = config_manager.load_charts()
+        options = [
+            {"label": chart.get('name', chart.get('title', '未命名图表')), "value": chart.get('id')}
+            for chart in charts if chart.get('id')
+        ]
+        if not options:
+            options = [{"label": "暂无可用图表，请先创建图表", "value": None, "disabled": True}]
+        return True, options
+    
+    elif trigger_id == "btn-cancel-add-chart":
+        return False, dash.no_update
+    
+    elif trigger_id == "btn-confirm-add-chart":
+        if selected_chart_id and dashboard_config:
+            chart_ids = dashboard_config.get('chart_ids', [])
+            if selected_chart_id not in chart_ids:
+                chart_ids.append(selected_chart_id)
+                dashboard_config['chart_ids'] = chart_ids
+                config_manager.save_dashboard(dashboard_config)
+        return False, dash.no_update
+    
+    return dash.no_update, dash.no_update
+
+@app.callback(
+    [Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
+     Output("current-dashboard-config", "data", allow_duplicate=True)],
+    Input({"type": "remove-chart-from-dashboard", "chart_id": ALL}, "n_clicks"),
+    State("current-dashboard-config", "data"),
+    prevent_initial_call=True
+)
+def remove_chart_from_dashboard(remove_clicks, dashboard_config):
+    """从仪表盘中移除图表"""
+    if not dashboard_config or not any(remove_clicks):
+        return dash.no_update, dash.no_update
+    
+    ctx = callback_context
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update
+    
+    # 获取被点击的图表ID
+    trigger_id = ctx.triggered[0]["prop_id"]
+    if "chart_id" in trigger_id:
+        # 从JSON字符串中提取chart_id
+        import json
+        try:
+            chart_id_dict = json.loads(trigger_id.split(".")[0])
+            chart_id = chart_id_dict.get("chart_id")
+            
+            chart_ids = dashboard_config.get('chart_ids', [])
+            if chart_id in chart_ids:
+                chart_ids.remove(chart_id)
+                dashboard_config['chart_ids'] = chart_ids
+                config_manager.save_dashboard(dashboard_config)
+                return dash.callback_context.triggered[0]["value"] + 1 if dash.callback_context.triggered else 1, dashboard_config
+        except:
+            pass
+    
+    return dash.no_update, dash.no_update
+
+@app.callback(
+    Output("dashboard-charts-container", "children", allow_duplicate=True),
+    [Input("btn-export-dashboard-png", "n_clicks"),
+     Input("btn-export-dashboard-pdf", "n_clicks"),
+     Input("btn-export-dashboard-html", "n_clicks")],
+    [State("current-dashboard-config", "data"),
+     State("dashboard-charts-container", "children")],
+    prevent_initial_call=True
+)
+def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, current_charts):
+    """导出仪表盘"""
+    ctx = callback_context
+    if not ctx.triggered or not dashboard_config:
+        return dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    try:
+        chart_ids = dashboard_config.get('chart_ids', [])
+        if not chart_ids:
+            return html.Div([
+                dbc.Alert("该仪表盘没有图表，无法导出", color="warning", className="m-2"),
+            ])
+        
+        charts = config_manager.load_charts()
+        chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+        
+        # 收集所有图表
+        figures = []
+        for chart_id in chart_ids:
+            chart_config = chart_map.get(chart_id)
+            if not chart_config:
+                continue
+            
+            datasource_id = chart_config.get('datasource_id')
+            if not datasource_id:
+                continue
+            
+            try:
+                ds_config = config_manager.get_datasource(datasource_id)
+                if not ds_config:
+                    continue
+                
+                adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+                df = adapter.fetch_data(limit=1000)
+                
+                if df is None or df.empty:
+                    continue
+                
+                chart_config_for_engine = {
+                    "type": chart_config.get('type', 'line'),
+                    "x": chart_config.get('x'),
+                    "y": chart_config.get('y'),
+                    "group": chart_config.get('group'),
+                    "title": chart_config.get('title', chart_config.get('name', '图表')),
+                    "color_theme": chart_config.get('color_theme', 'default'),
+                    "custom_colors": chart_config.get('custom_colors', {}),
+                    "show_labels": chart_config.get('show_labels', False),
+                    "show_legend": chart_config.get('show_legend', True),
+                    "agg_function": chart_config.get('agg_function', 'sum'),
+                }
+                
+                fig = chart_engine.create_chart(df, chart_config_for_engine)
+                figures.append(fig)
+            except Exception as e:
+                continue
+        
+        if not figures:
+            return html.Div([
+                dbc.Alert("无法生成图表，请检查数据源配置", color="danger", className="m-2"),
+            ])
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dashboard_name = (dashboard_config.get('name', 'dashboard')).replace(" ", "_").replace("/", "_")
+        
+        if trigger_id == "btn-export-dashboard-png":
+            if figures:
+                export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
+                figures[0].write_image(str(export_path), width=1200, height=600)
+                return html.Div([
+                    dbc.Alert(f"仪表盘已导出为PNG：{export_path}", color="success", className="m-2"),
+                    current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+                ])
+        
+        elif trigger_id == "btn-export-dashboard-pdf":
+            if figures:
+                export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.pdf"
+                figures[0].write_image(str(export_path), format="pdf", width=1200, height=600)
+                return html.Div([
+                    dbc.Alert(f"仪表盘已导出为PDF：{export_path}", color="success", className="m-2"),
+                    current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+                ])
+        
+        elif trigger_id == "btn-export-dashboard-html":
+            export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.html"
+            html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>{dashboard_config.get('name', '仪表盘')}</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>{dashboard_config.get('name', '仪表盘')}</h1>
+    <p>{dashboard_config.get('description', '')}</p>
+"""
+            for i, fig in enumerate(figures):
+                chart_html = fig.to_html(include_plotlyjs=False, div_id=f"chart-{i}")
+                html_content += f'<div id="chart-{i}"></div>\n'
+                html_content += f'<script>{chart_html}</script>\n'
+            
+            html_content += """</body>
+</html>"""
+            
+            with open(export_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            return html.Div([
+                dbc.Alert(f"仪表盘已导出为HTML：{export_path}", color="success", className="m-2"),
+                current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+            ])
+        
+        return dash.no_update
+    
+    except Exception as e:
+        return html.Div([
+            dbc.Alert(f"导出失败：{str(e)}", color="danger", className="m-2"),
+            current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+        ])
 
 # ==========================================
 # 启动应用
