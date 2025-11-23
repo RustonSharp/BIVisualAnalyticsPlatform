@@ -3420,7 +3420,7 @@ def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, curr
                         title_height = 50  # 标题高度
                         
                         total_height = sum(title_height + chart_height + spacing for _, _ in chart_images) - spacing
-                        combined_img = Image.new('RGB', (chart_width, total_height), color='white')
+                        combined_img = Image.new('RGB', (chart_width, total_height), color=0xFFFFFF)
                         
                         # 将每个图表粘贴到组合图片中
                         y_offset = 0
