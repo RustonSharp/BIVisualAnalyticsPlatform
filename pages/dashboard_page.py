@@ -15,11 +15,6 @@ from tools.export_utils import (
     export_dashboard_to_png,
     export_dashboard_to_pdf,
 )
-from tools.export_utils import (
-    export_dashboard_to_html,
-    export_dashboard_to_png,
-    export_dashboard_to_pdf,
-)
 
 
 def create_dashboard_page():
@@ -30,6 +25,8 @@ def create_dashboard_page():
             dcc.Store(id="current-dashboard-id", data=None),
             dcc.Store(id="current-dashboard-config", data=None),
             dcc.Store(id="dashboard-refresh-trigger", data=0),
+            dcc.Store(id="export-status-message", data=None),  # 存储导出状态消息和时间戳
+            dcc.Interval(id="export-status-interval", interval=100, disabled=True),  # 用于定时清除消息
             
             # 顶部工具栏
             dbc.Row(
@@ -229,10 +226,11 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         [Input("current-dashboard-config", "data"),
          Input("time-filter", "value"),
          Input("start-date", "date"),
-         Input("end-date", "date")],
+         Input("end-date", "date"),
+         Input("export-status-message", "data")],
         prevent_initial_call=False
     )
-    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date):
+    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status):
         """渲染仪表盘中的图表"""
         if not dashboard_config:
             return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")
@@ -534,8 +532,15 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     className="m-4"
                 )
             else:
-                return html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
+                result = html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
+                # 如果有导出状态消息，显示在顶部
+                if export_status and export_status.get('message'):
+                    return [export_status['message'], result]
+                return result
         
+        # 如果有导出状态消息，显示在图表前面
+        if export_status and export_status.get('message'):
+            return [export_status['message']] + rows
         return rows
 
     @app.callback(
@@ -717,21 +722,22 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         return dash.no_update, dash.no_update
 
     @app.callback(
-        Output("dashboard-charts-container", "children", allow_duplicate=True),
+        [Output("export-status-message", "data", allow_duplicate=True),
+         Output("export-status-interval", "disabled", allow_duplicate=True)],
         [Input("btn-export-dashboard-png", "n_clicks"),
          Input("btn-export-dashboard-pdf", "n_clicks"),
          Input("btn-export-dashboard-html", "n_clicks")],
-        [State("current-dashboard-config", "data"),
-         State("dashboard-charts-container", "children")],
+        [State("current-dashboard-config", "data")],
         prevent_initial_call=True
     )
-    def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, current_charts):
+    def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config):
         """导出仪表盘"""
         import traceback
+        import time
         
         ctx = callback_context
         if not ctx.triggered or not dashboard_config:
-            return dash.no_update
+            return dash.no_update, dash.no_update
         
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
         
@@ -739,13 +745,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             chart_ids = dashboard_config.get('chart_ids', [])
             if not chart_ids:
                 alert = dbc.Alert("该仪表盘没有图表，无法导出", color="warning", className="m-2")
-                if current_charts:
-                    if isinstance(current_charts, list):
-                        return [alert] + current_charts
-                    else:
-                        return [alert, current_charts]
-                else:
-                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                return {
+                    "message": alert,
+                    "timestamp": time.time()
+                }, False  # 启用 Interval
             
             charts = config_manager.load_charts()
             chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
@@ -800,13 +803,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             
             if not figures_with_titles:
                 alert = dbc.Alert("无法生成图表，请检查数据源配置", color="danger", className="m-2")
-                if current_charts:
-                    if isinstance(current_charts, list):
-                        return [alert] + current_charts
-                    else:
-                        return [alert, current_charts]
-                else:
-                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                return {
+                    "message": alert,
+                    "timestamp": time.time()
+                }, False  # 启用 Interval
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             dashboard_name = (dashboard_config.get('name', 'dashboard')).replace(" ", "_").replace("/", "_")
@@ -820,13 +820,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         timestamp
                     )
                     alert = dbc.Alert(f"仪表盘已导出为PNG：{export_path.name}", color="success", className="m-2")
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval，3秒后自动清除
                 except Exception as e:
                     import traceback
                     error_msg = str(e)
@@ -838,13 +835,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         color="danger",
                         className="m-2"
                     )
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval
             
             elif trigger_id == "btn-export-dashboard-pdf":
                 try:
@@ -855,25 +849,19 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         timestamp
                     )
                     alert = dbc.Alert(f"仪表盘已导出为PDF：{export_path.name}", color="success", className="m-2")
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval，3秒后自动清除
                 except Exception as e:
                     import traceback
                     error_msg = str(e)
                     traceback.print_exc()
                     alert = dbc.Alert(f"PDF导出失败：{error_msg}。请确保已安装kaleido库（pip install kaleido）以及reportlab和PIL库（pip install reportlab pillow）。", color="danger", className="m-2")
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval
             
             elif trigger_id == "btn-export-dashboard-html":
                 try:
@@ -884,13 +872,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         timestamp
                     )
                     alert = dbc.Alert(f"仪表盘已导出为HTML：{export_path.name}", color="success", className="m-2")
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval，3秒后自动清除
                 except Exception as e:
                     import traceback
                     error_msg = str(e)
@@ -898,15 +883,12 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     print(f"HTML导出失败: {error_msg}")
                     print(error_trace)
                     alert = dbc.Alert(f"HTML导出失败：{error_msg}", color="danger", className="m-2")
-                    if current_charts:
-                        if isinstance(current_charts, list):
-                            return [alert] + current_charts
-                        else:
-                            return [alert, current_charts]
-                    else:
-                        return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+                    return {
+                        "message": alert,
+                        "timestamp": time.time()
+                    }, False  # 启用 Interval
             
-            return dash.no_update
+            return dash.no_update, dash.no_update
         
         except Exception as e:
             import traceback
@@ -915,11 +897,32 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             print(f"导出仪表盘时发生错误: {error_msg}")
             print(error_trace)
             alert = dbc.Alert(f"导出失败：{error_msg}。请检查控制台日志获取详细信息。", color="danger", className="m-2")
-            if current_charts:
-                if isinstance(current_charts, list):
-                    return [alert] + current_charts
-                else:
-                    return [alert, current_charts]
-            else:
-                return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+            return {
+                "message": alert,
+                "timestamp": time.time()
+            }, False  # 启用 Interval
+
+    @app.callback(
+        [Output("export-status-message", "data", allow_duplicate=True),
+         Output("export-status-interval", "disabled", allow_duplicate=True)],
+        Input("export-status-interval", "n_intervals"),
+        State("export-status-message", "data"),
+        prevent_initial_call=True
+    )
+    def clear_export_status(n_intervals, status_data):
+        """3秒后自动清除导出状态消息"""
+        import time
+        
+        if not status_data or not status_data.get('timestamp'):
+            return None, True  # 没有消息，禁用 Interval
+        
+        current_time = time.time()
+        elapsed = current_time - status_data.get('timestamp', 0)
+        
+        # 如果超过3秒，清除消息并禁用 Interval
+        if elapsed >= 3.0:
+            return None, True
+        
+        # 否则保持消息不变，继续运行 Interval
+        return dash.no_update, False
 
