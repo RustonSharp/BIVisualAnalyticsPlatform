@@ -8,6 +8,7 @@ from dash import dcc, html, Input, Output, State, callback_context, ALL, clients
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import base64
 import io
@@ -3143,7 +3144,9 @@ def delete_dashboard(delete_clicks, dashboard_id):
 
 @app.callback(
     [Output("modal-add-chart-to-dashboard", "is_open"),
-     Output("chart-selector-for-dashboard", "options")],
+     Output("chart-selector-for-dashboard", "options"),
+     Output("current-dashboard-config", "data", allow_duplicate=True),
+     Output("dashboard-add-chart-status", "children", allow_duplicate=True)],
     [Input("btn-add-chart-to-dashboard", "n_clicks"),
      Input("btn-cancel-add-chart", "n_clicks"),
      Input("btn-confirm-add-chart", "n_clicks")],
@@ -3156,7 +3159,7 @@ def toggle_add_chart_modal(add_clicks, cancel_clicks, confirm_clicks, is_open, s
     """打开/关闭添加图表模态框"""
     ctx = callback_context
     if not ctx.triggered:
-        return dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
@@ -3169,10 +3172,10 @@ def toggle_add_chart_modal(add_clicks, cancel_clicks, confirm_clicks, is_open, s
         ]
         if not options:
             options = [{"label": "暂无可用图表，请先创建图表", "value": None, "disabled": True}]
-        return True, options
+        return True, options, dash.no_update, dash.no_update
     
     elif trigger_id == "btn-cancel-add-chart":
-        return False, dash.no_update
+        return False, dash.no_update, dash.no_update, dash.no_update
     
     elif trigger_id == "btn-confirm-add-chart":
         if selected_chart_id and dashboard_config:
@@ -3181,9 +3184,19 @@ def toggle_add_chart_modal(add_clicks, cancel_clicks, confirm_clicks, is_open, s
                 chart_ids.append(selected_chart_id)
                 dashboard_config['chart_ids'] = chart_ids
                 config_manager.save_dashboard(dashboard_config)
-        return False, dash.no_update
+                # 重新加载仪表盘配置，确保获取最新数据
+                updated_dashboard = config_manager.get_dashboard(dashboard_config.get('id'))
+                if updated_dashboard:
+                    # 返回更新后的仪表盘配置，这会触发 render_dashboard_charts 重新渲染
+                    return False, dash.no_update, updated_dashboard, dbc.Alert("图表已添加到仪表盘", color="success", className="m-2")
+                else:
+                    return False, dash.no_update, dashboard_config, dbc.Alert("图表已添加到仪表盘", color="success", className="m-2")
+            else:
+                return False, dash.no_update, dash.no_update, dbc.Alert("该图表已存在于仪表盘中", color="warning", className="m-2")
+        else:
+            return False, dash.no_update, dash.no_update, dbc.Alert("请选择图表和仪表盘", color="warning", className="m-2")
     
-    return dash.no_update, dash.no_update
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 @app.callback(
     [Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
@@ -3232,24 +3245,34 @@ def remove_chart_from_dashboard(remove_clicks, dashboard_config):
 )
 def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, current_charts):
     """导出仪表盘"""
+    import traceback
+    
     ctx = callback_context
     if not ctx.triggered or not dashboard_config:
         return dash.no_update
     
     trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
+    # 最外层异常处理，确保总是返回一个值
     try:
         chart_ids = dashboard_config.get('chart_ids', [])
         if not chart_ids:
-            return html.Div([
-                dbc.Alert("该仪表盘没有图表，无法导出", color="warning", className="m-2"),
-            ])
+            # 确保返回扁平化的结构
+            alert = dbc.Alert("该仪表盘没有图表，无法导出", color="warning", className="m-2")
+            if current_charts:
+                # 如果 current_charts 是列表，展开它；否则直接使用
+                if isinstance(current_charts, list):
+                    return [alert] + current_charts
+                else:
+                    return [alert, current_charts]
+            else:
+                return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
         
         charts = config_manager.load_charts()
         chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
         
-        # 收集所有图表
-        figures = []
+        # 收集所有图表及其标题和类型
+        figures_with_titles = []
         for chart_id in chart_ids:
             chart_config = chart_map.get(chart_id)
             if not chart_config:
@@ -3270,12 +3293,16 @@ def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, curr
                 if df is None or df.empty:
                     continue
                 
+                chart_title = chart_config.get('title', chart_config.get('name', '图表'))
+                
+                # 如果是表格类型，需要特殊处理
+                chart_type = chart_config.get('type', 'line')
                 chart_config_for_engine = {
-                    "type": chart_config.get('type', 'line'),
+                    "type": chart_type,
                     "x": chart_config.get('x'),
                     "y": chart_config.get('y'),
                     "group": chart_config.get('group'),
-                    "title": chart_config.get('title', chart_config.get('name', '图表')),
+                    "title": chart_title,
                     "color_theme": chart_config.get('color_theme', 'default'),
                     "custom_colors": chart_config.get('custom_colors', {}),
                     "show_labels": chart_config.get('show_labels', False),
@@ -3283,72 +3310,442 @@ def export_dashboard(png_clicks, pdf_clicks, html_clicks, dashboard_config, curr
                     "agg_function": chart_config.get('agg_function', 'sum'),
                 }
                 
+                # 如果是表格类型，添加表格相关配置
+                if chart_type == 'table':
+                    chart_config_for_engine['table_columns'] = chart_config.get('table_columns', [])
+                    chart_config_for_engine['table_rows'] = chart_config.get('table_rows', [])
+                    chart_config_for_engine['table_orientation'] = chart_config.get('table_orientation', 'horizontal')
+                
                 fig = chart_engine.create_chart(df, chart_config_for_engine)
-                figures.append(fig)
+                figures_with_titles.append((fig, chart_title, chart_type))
             except Exception as e:
+                print(f"生成图表 {chart_id} 时出错: {str(e)}")
+                traceback.print_exc()
                 continue
         
-        if not figures:
-            return html.Div([
-                dbc.Alert("无法生成图表，请检查数据源配置", color="danger", className="m-2"),
-            ])
+        if not figures_with_titles:
+            alert = dbc.Alert("无法生成图表，请检查数据源配置", color="danger", className="m-2")
+            if current_charts:
+                if isinstance(current_charts, list):
+                    return [alert] + current_charts
+                else:
+                    return [alert, current_charts]
+            else:
+                return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dashboard_name = (dashboard_config.get('name', 'dashboard')).replace(" ", "_").replace("/", "_")
         
         if trigger_id == "btn-export-dashboard-png":
-            if figures:
-                export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
-                figures[0].write_image(str(export_path), width=1200, height=600)
-                return html.Div([
-                    dbc.Alert(f"仪表盘已导出为PNG：{export_path}", color="success", className="m-2"),
-                    current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
-                ])
+            # PNG导出：将所有图表组合到一个大的图片中
+            print(f"[PNG导出] 开始导出流程，仪表盘: {dashboard_name}")
+            
+            # 检查kaleido是否可用，如果不可用立即返回错误
+            kaleido_available = False
+            try:
+                import kaleido
+                kaleido_available = True
+                print("[PNG导出] kaleido库可用")
+            except ImportError:
+                print("[PNG导出] 错误: kaleido库未安装")
+                alert = dbc.Alert("PNG导出需要kaleido库。请先运行 'pip install kaleido' 安装。", color="warning", className="m-2")
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+            
+            try:
+                print(f"[PNG导出] 准备导出 {len(figures_with_titles)} 个图表")
+                num_figures = len(figures_with_titles)
+                if num_figures == 1:
+                    # 只有一个图表，直接导出
+                    export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
+                    fig, title, chart_type = figures_with_titles[0]
+                    print(f"[PNG导出] 导出单个图表到: {export_path} (类型: {chart_type})")
+                    try:
+                        # 根据图表类型选择不同的尺寸
+                        if chart_type in ['pie', 'table']:
+                            fig.write_image(str(export_path), width=800, height=600, scale=1, engine='kaleido')
+                        else:
+                            fig.write_image(str(export_path), width=1200, height=800, scale=1, engine='kaleido')
+                        print(f"[PNG导出] 单个图表导出完成: {export_path}")
+                    except Exception as e:
+                        print(f"[PNG导出] 导出失败: {str(e)}")
+                        raise
+                else:
+                    # 检查是否有饼图或表格（这些类型不能使用标准subplot）
+                    has_pie_or_table = any(chart_type in ['pie', 'table'] for _, _, chart_type in figures_with_titles)
+                
+                if has_pie_or_table:
+                    # 如果有饼图或表格，使用PIL组合图片
+                    # 注意：饼图和表格不能使用subplot，所以需要分别导出后组合
+                    try:
+                        from PIL import Image
+                        import io as io_module
+                        
+                        chart_images = []
+                        for idx, (fig, title, chart_type) in enumerate(figures_with_titles):
+                            # 先将每个图表导出为临时文件，然后读取
+                            print(f"[PNG导出] 正在导出图表 {idx+1}/{len(figures_with_titles)}: {title} (类型: {chart_type})")
+                            temp_img_path = EXPORT_DIR / f"temp_chart_{idx}_{timestamp}.png"
+                            
+                            # 尝试使用write_image导出，添加超时和错误处理
+                            try:
+                                # 对于复杂的图表，尝试更小的尺寸和更低的scale
+                                if chart_type in ['pie', 'table']:
+                                    # 饼图和表格使用较小的尺寸
+                                    fig.write_image(str(temp_img_path), width=800, height=500, scale=1, engine='kaleido')
+                                else:
+                                    fig.write_image(str(temp_img_path), width=1000, height=600, scale=1, engine='kaleido')
+                                print(f"[PNG导出] 图表 {idx+1} 已保存到临时文件: {temp_img_path}")
+                            except Exception as e:
+                                print(f"[PNG导出] 图表 {idx+1} 导出失败: {str(e)}")
+                                # 如果单个图表导出失败，跳过这个图表
+                                continue
+                            
+                            try:
+                                img = Image.open(temp_img_path)
+                                chart_images.append((img, title))
+                            except Exception as e:
+                                print(f"[PNG导出] 无法打开临时图片文件: {str(e)}")
+                                continue
+                        
+                        # 计算组合图片的尺寸
+                        chart_width = 1000
+                        chart_height = 600
+                        spacing = 50  # 图表之间的间距
+                        title_height = 50  # 标题高度
+                        
+                        total_height = sum(title_height + chart_height + spacing for _, _ in chart_images) - spacing
+                        combined_img = Image.new('RGB', (chart_width, total_height), color='white')
+                        
+                        # 将每个图表粘贴到组合图片中
+                        y_offset = 0
+                        for img, title in chart_images:
+                            # 添加标题（简单的文字，可以用PIL的ImageDraw绘制更复杂的标题）
+                            # 这里直接粘贴图片，标题已经在图表中了
+                            combined_img.paste(img, (0, y_offset))
+                            y_offset += chart_height + spacing
+                        
+                        export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
+                        print(f"[PNG导出] 保存组合图片到: {export_path}")
+                        combined_img.save(str(export_path))
+                        print(f"[PNG导出] 组合图片保存完成")
+                        
+                        # 清理临时文件
+                        for idx in range(len(figures_with_titles)):
+                            temp_img_path = EXPORT_DIR / f"temp_chart_{idx}_{timestamp}.png"
+                            if temp_img_path.exists():
+                                temp_img_path.unlink()
+                        
+                        print(f"[PNG导出] 所有临时文件已清理，导出完成: {export_path}")
+                    except ImportError:
+                        # 如果没有PIL，尝试单独导出每个图表
+                        # 这种情况下，我们只导出第一个图表
+                        export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
+                        print(f"[PNG导出] 回退方案：导出单个图表到: {export_path}")
+                        figures_with_titles[0][0].write_image(str(export_path), width=1200, height=800, scale=1)  # 降低scale以加快速度
+                        print(f"[PNG导出] 回退方案导出完成: {export_path}")
+                else:
+                    # 没有饼图或表格，可以使用subplots
+                    rows = (num_figures + 1) // 2  # 每行2个，计算需要的行数
+                    cols = 2 if num_figures > 1 else 1
+                    
+                    # 创建subplot
+                    combined_fig = make_subplots(
+                        rows=rows,
+                        cols=cols,
+                        subplot_titles=[title for _, title, _ in figures_with_titles],
+                        vertical_spacing=0.1,
+                        horizontal_spacing=0.1
+                    )
+                    
+                    # 将每个图表添加到subplot中
+                    for idx, (fig, title, chart_type) in enumerate(figures_with_titles):
+                        row = (idx // cols) + 1
+                        col = (idx % cols) + 1
+                        
+                        # 复制trace到组合图中
+                        for trace in fig.data:
+                            combined_fig.add_trace(trace, row=row, col=col)
+                        
+                        # 更新x轴和y轴标题（如果有）
+                        if fig.layout.xaxis and fig.layout.xaxis.title:
+                            combined_fig.update_xaxes(title_text=fig.layout.xaxis.title.text, row=row, col=col)
+                        if fig.layout.yaxis and fig.layout.yaxis.title:
+                            combined_fig.update_yaxes(title_text=fig.layout.yaxis.title.text, row=row, col=col)
+                    
+                    # 更新整体布局
+                    combined_fig.update_layout(
+                        title_text=dashboard_config.get('name', '仪表盘'),
+                        title_x=0.5,
+                        height=800 * rows,
+                        showlegend=True
+                    )
+                    
+                    export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.png"
+                    print(f"[PNG导出] 导出组合图表到: {export_path}")
+                    combined_fig.write_image(str(export_path), width=1200, height=800 * rows, scale=1)  # 降低scale以加快速度
+                    print(f"[PNG导出] 组合图表导出完成: {export_path}")
+                
+                alert = dbc.Alert(f"仪表盘已导出为PNG：{export_path.name}", color="success", className="m-2")
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+            except Exception as e:
+                import traceback
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+                print(f"PNG导出失败: {error_msg}")
+                print(error_trace)
+                # 简化错误消息
+                short_error = error_msg.split('\n')[0] if '\n' in error_msg else error_msg
+                if not kaleido_available:
+                    alert = dbc.Alert(f"PNG导出失败：未安装kaleido库。请运行 'pip install kaleido' 安装。", color="danger", className="m-2")
+                else:
+                    alert = dbc.Alert(f"PNG导出失败：{short_error}。", color="danger", className="m-2")
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
         
         elif trigger_id == "btn-export-dashboard-pdf":
-            if figures:
+            # PDF导出：每个图表一页
+            try:
+                from reportlab.lib.pagesizes import letter, A4
+                from reportlab.lib.utils import ImageReader
+                from reportlab.pdfgen import canvas
+                from PIL import Image
+                import io as io_module
+                
                 export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.pdf"
-                figures[0].write_image(str(export_path), format="pdf", width=1200, height=600)
-                return html.Div([
-                    dbc.Alert(f"仪表盘已导出为PDF：{export_path}", color="success", className="m-2"),
-                    current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
-                ])
+                
+                # 创建PDF
+                c = canvas.Canvas(str(export_path), pagesize=A4)
+                page_width, page_height = A4
+                
+                # 将每个图表导出为图片，然后添加到PDF
+                temp_images = []
+                for idx, (fig, title, chart_type) in enumerate(figures_with_titles):
+                    # 导出图表为PNG字节流
+                    img_bytes = fig.to_image(format="png", width=1000, height=600, scale=2)
+                    img = Image.open(io_module.BytesIO(img_bytes))
+                    
+                    # 调整图片大小以适应页面
+                    img_width, img_height = img.size
+                    scale = min((page_width - 100) / img_width, (page_height - 150) / img_height)
+                    new_width = img_width * scale
+                    new_height = img_height * scale
+                    
+                    # 调整图片大小
+                    img = img.resize((int(new_width), int(new_height)), Image.Resampling.LANCZOS)
+                    
+                    # 保存到临时文件
+                    temp_img_path = EXPORT_DIR / f"temp_chart_{idx}_{timestamp}.png"
+                    img.save(temp_img_path)
+                    temp_images.append(temp_img_path)
+                    
+                    # 添加新页
+                    if idx > 0:
+                        c.showPage()
+                    
+                    # 添加标题
+                    c.setFont("Helvetica-Bold", 16)
+                    title_width = c.stringWidth(title, "Helvetica-Bold", 16)
+                    c.drawString((page_width - title_width) / 2, page_height - 50, title)
+                    
+                    # 添加图片（居中）
+                    x = (page_width - new_width) / 2
+                    y = page_height - 100 - new_height
+                    c.drawImage(str(temp_img_path), x, y, width=new_width, height=new_height)
+                
+                # 保存PDF
+                c.save()
+                
+                # 清理临时文件
+                for temp_img in temp_images:
+                    if temp_img.exists():
+                        temp_img.unlink()
+                
+                alert = dbc.Alert(f"仪表盘已导出为PDF：{export_path.name}", color="success", className="m-2")
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+            except ImportError as e:
+                # 如果没有reportlab或PIL，使用kaleido导出单个大图
+                try:
+                    if len(figures_with_titles) == 1:
+                        export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.pdf"
+                        figures_with_titles[0][0].write_image(str(export_path), format="pdf", width=1200, height=800)
+                        alert = dbc.Alert(f"仪表盘已导出为PDF：{export_path.name}（部分图表格式可能受限，建议安装reportlab以支持多页PDF导出）", color="warning", className="m-2")
+                    else:
+                        alert = dbc.Alert("PDF导出需要安装reportlab和PIL库。请运行: pip install reportlab pillow。多图表导出需要这些库。", color="warning", className="m-2")
+                except Exception as e2:
+                    import traceback
+                    error_msg = str(e2)
+                    traceback.print_exc()
+                    alert = dbc.Alert(f"PDF导出失败：{error_msg}。请确保已安装kaleido库（pip install kaleido）以及reportlab和PIL库（pip install reportlab pillow）。", color="danger", className="m-2")
+                
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
+            except Exception as e:
+                import traceback
+                error_msg = str(e)
+                traceback.print_exc()
+                alert = dbc.Alert(f"PDF导出失败：{error_msg}。请确保已安装kaleido库（pip install kaleido）以及reportlab和PIL库（pip install reportlab pillow）。", color="danger", className="m-2")
+                if current_charts:
+                    if isinstance(current_charts, list):
+                        return [alert] + current_charts
+                    else:
+                        return [alert, current_charts]
+                else:
+                    return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
         
         elif trigger_id == "btn-export-dashboard-html":
+            # HTML导出：生成完整的、格式良好的HTML
             export_path = EXPORT_DIR / f"{dashboard_name}_{timestamp}.html"
-            html_content = f"""<!DOCTYPE html>
-<html>
+            
+            # 收集所有图表的HTML内容
+            charts_html = []
+            for idx, (fig, title, chart_type) in enumerate(figures_with_titles):
+                # 为每个图表生成HTML（不包含plotly.js，后面统一包含）
+                chart_html = fig.to_html(include_plotlyjs=False, div_id=f"dashboard-chart-{idx}", full_html=False)
+                charts_html.append((title, chart_html))
+            
+            # 构建完整的HTML
+            html_template = f"""<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{dashboard_config.get('name', '仪表盘')}</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }}
+        .dashboard-header {{
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }}
+        .dashboard-title {{
+            font-size: 2rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }}
+        .dashboard-description {{
+            color: #666;
+            font-size: 1rem;
+        }}
+        .chart-container {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }}
+        .chart-title {{
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }}
+        .chart-content {{
+            min-height: 400px;
+        }}
+        .footer {{
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-size: 0.875rem;
+        }}
+    </style>
 </head>
 <body>
-    <h1>{dashboard_config.get('name', '仪表盘')}</h1>
-    <p>{dashboard_config.get('description', '')}</p>
+    <div class="container-fluid">
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">{dashboard_config.get('name', '仪表盘')}</h1>
+            <p class="dashboard-description">{dashboard_config.get('description', '数据可视化仪表盘')}</p>
+            <p class="text-muted small">导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        </div>
 """
-            for i, fig in enumerate(figures):
-                chart_html = fig.to_html(include_plotlyjs=False, div_id=f"chart-{i}")
-                html_content += f'<div id="chart-{i}"></div>\n'
-                html_content += f'<script>{chart_html}</script>\n'
             
-            html_content += """</body>
+            # 添加每个图表
+            for title, chart_html in charts_html:
+                html_template += f"""
+        <div class="chart-container">
+            <h3 class="chart-title">{title}</h3>
+            <div class="chart-content">
+                {chart_html}
+            </div>
+        </div>
+"""
+            
+            html_template += """
+        <div class="footer">
+            <p>由 BI 数据可视化与分析平台生成</p>
+        </div>
+    </div>
+</body>
 </html>"""
             
             with open(export_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
+                f.write(html_template)
             
-            return html.Div([
-                dbc.Alert(f"仪表盘已导出为HTML：{export_path}", color="success", className="m-2"),
-                current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
-            ])
+            alert = dbc.Alert(f"仪表盘已导出为HTML：{export_path.name}", color="success", className="m-2")
+            if current_charts:
+                if isinstance(current_charts, list):
+                    return [alert] + current_charts
+                else:
+                    return [alert, current_charts]
+            else:
+                return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
         
         return dash.no_update
     
     except Exception as e:
-        return html.Div([
-            dbc.Alert(f"导出失败：{str(e)}", color="danger", className="m-2"),
-            current_charts if current_charts else html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
-        ])
+        # 最外层异常处理，捕获所有未处理的异常
+        import traceback
+        error_msg = str(e)
+        error_trace = traceback.format_exc()
+        print(f"导出仪表盘时发生错误: {error_msg}")
+        print(error_trace)
+        alert = dbc.Alert(f"导出失败：{error_msg}。请检查控制台日志获取详细信息。", color="danger", className="m-2")
+        if current_charts:
+            if isinstance(current_charts, list):
+                return [alert] + current_charts
+            else:
+                return [alert, current_charts]
+        else:
+            return [alert, html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")]
 
 # ==========================================
 # 启动应用
