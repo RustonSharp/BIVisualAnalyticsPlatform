@@ -280,7 +280,7 @@ app.index_string = f"""
 
 def default_chart_assignments() -> Dict[str, Any]:
     """获取图表字段配置的默认结构"""
-    return {"x": None, "y": [], "group": None}
+    return {"x": None, "y": [], "group": None, "table_columns": [], "table_rows": [], "table_orientation": "horizontal"}
 
 
 def render_assigned_fields(value: Optional[Any], placeholder: str, multiple: bool = False):
@@ -566,8 +566,9 @@ def create_chart_designer_page():
     return dbc.Container(
         [
             html.H2("图表设计器", className="mb-4"),
-            dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
-            dcc.Input(id="dnd-last-event", type="text", value="", style={"display": "none"}),
+                            dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
+                            dcc.Store(id="custom-colors-config", data={}),  # 存储自定义颜色配置
+                            dcc.Input(id="dnd-last-event", type="text", value="", style={"display": "none"}),
             
             dbc.Row(
                 [
@@ -631,107 +632,183 @@ def create_chart_designer_page():
                                 className="mb-3",
                             ),
                             
-                            # 拖拽配置区
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("图表配置"),
-                                    dbc.CardBody(
-                                        [
-                                            html.Div(
-                                                [
+                            # 拖拽配置区 - 图表类型配置
+                            html.Div(id="chart-config-area", children=[
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader("图表配置"),
+                                        dbc.CardBody(
+                                            [
+                                                # 普通图表配置（折线图、柱状图等）
+                                                html.Div(id="chart-config-normal", children=[
                                                     html.Div(
                                                         [
-                                                            html.Label("X 轴", className="form-label fw-bold mb-0"),
-                                                            dbc.Button("清空", id="btn-clear-x-axis", color="link", size="sm", className="p-0 ms-2"),
-                                                        ],
-                                                        className="d-flex align-items-center mb-2"
+                                                            # X 轴配置（饼图时隐藏）
+                                                            html.Div(id="x-axis-config", children=[
+                                                                html.Div(
+                                                                    [
+                                                                        html.Label("X 轴", className="form-label fw-bold mb-0"),
+                                                                        dbc.Button("清空", id="btn-clear-x-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                                    ],
+                                                                    className="d-flex align-items-center mb-2"
+                                                                ),
+                                                                html.Div(
+                                                                    id="drop-x-axis",
+                                                                    children=[
+                                                                        html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                    ],
+                                                                    style={
+                                                                        "min-height": "60px",
+                                                                        "margin-bottom": "15px",
+                                                                        "border": "2px dashed #ced4da",
+                                                                        "borderRadius": "6px",
+                                                                        "padding": "0.5rem"
+                                                                    },
+                                                                    className="drop-zone",
+                                                                ),
+                                                            ]),
+                                                            # Y 轴配置（饼图时显示为"数值字段"）
+                                                            html.Div(
+                                                                [
+                                                                    html.Label(id="y-axis-label", children="Y 轴", className="form-label fw-bold mb-0"),
+                                                                    dbc.Button("清空", id="btn-clear-y-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                                ],
+                                                                className="d-flex align-items-center mb-2"
+                                                            ),
+                                                            html.P(id="y-axis-hint", children="拖拽字段到此处", className="text-muted text-center mb-2 small"),
+                                                            html.Div(
+                                                                id="drop-y-axis",
+                                                                children=[
+                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                ],
+                                                                style={
+                                                                    "min-height": "60px",
+                                                                    "margin-bottom": "15px",
+                                                                    "border": "2px dashed #ced4da",
+                                                                    "borderRadius": "6px",
+                                                                    "padding": "0.5rem"
+                                                                },
+                                                                className="drop-zone",
+                                                            ),
+                                                            # 分组配置（饼图时显示为"分类字段（必需）"）
+                                                            html.Div(
+                                                                [
+                                                                    html.Label(id="group-label", children="分组/颜色", className="form-label fw-bold mb-0"),
+                                                                    dbc.Button("清空", id="btn-clear-group", color="link", size="sm", className="p-0 ms-2"),
+                                                                ],
+                                                                className="d-flex align-items-center mb-2"
+                                                            ),
+                                                            html.P(id="group-hint", children="拖拽字段到此处", className="text-muted text-center mb-2 small"),
+                                                            html.Div(
+                                                                id="drop-group",
+                                                                children=[
+                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                ],
+                                                                style={
+                                                                    "min-height": "60px",
+                                                                    "margin-bottom": "15px",
+                                                                    "border": "2px dashed #ced4da",
+                                                                    "borderRadius": "6px",
+                                                                    "padding": "0.5rem"
+                                                                },
+                                                                className="drop-zone",
+                                                            ),
+                                                        ]
                                                     ),
-                                                    html.Div(
-                                                        id="drop-x-axis",
-                                                        children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
-                                                        ],
-                                                        style={
-                                                            "min-height": "60px",
-                                                            "margin-bottom": "15px",
-                                                            "border": "2px dashed #ced4da",
-                                                            "borderRadius": "6px",
-                                                            "padding": "0.5rem"
-                                                        },
-                                                        className="drop-zone",
-                                                    ),
+                                                ]),
+                                                # 表格配置
+                                                html.Div(id="chart-config-table", children=[
                                                     html.Div(
                                                         [
-                                                            html.Label("Y 轴", className="form-label fw-bold mb-0"),
-                                                            dbc.Button("清空", id="btn-clear-y-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                            html.Label("展示方向", className="form-label fw-bold mb-2"),
+                                                            dbc.RadioItems(
+                                                                id="table-orientation",
+                                                                options=[
+                                                                    {"label": "横向展示（字段为列）", "value": "horizontal"},
+                                                                    {"label": "纵向展示（字段为行）", "value": "vertical"},
+                                                                ],
+                                                                value="horizontal",
+                                                                inline=False,
+                                                            ),
                                                         ],
-                                                        className="d-flex align-items-center mb-2"
+                                                        className="mb-3"
                                                     ),
-                                                    html.Div(
-                                                        id="drop-y-axis",
-                                                        children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
-                                                        ],
-                                                        style={
-                                                            "min-height": "60px",
-                                                            "margin-bottom": "15px",
-                                                            "border": "2px dashed #ced4da",
-                                                            "borderRadius": "6px",
-                                                            "padding": "0.5rem"
-                                                        },
-                                                        className="drop-zone",
-                                                    ),
-                                                    html.Div(
-                                                        [
-                                                            html.Label("分组/颜色", className="form-label fw-bold mb-0"),
-                                                            dbc.Button("清空", id="btn-clear-group", color="link", size="sm", className="p-0 ms-2"),
-                                                        ],
-                                                        className="d-flex align-items-center mb-2"
-                                                    ),
-                                                    html.Div(
-                                                        id="drop-group",
-                                                        children=[
-                                                            html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
-                                                        ],
-                                                        style={
-                                                            "min-height": "60px",
-                                                            "margin-bottom": "15px",
-                                                            "border": "2px dashed #ced4da",
-                                                            "borderRadius": "6px",
-                                                            "padding": "0.5rem"
-                                                        },
-                                                        className="drop-zone",
-                                                    ),
-                                                ]
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
+                                                    html.Div(id="table-columns-config", children=[
+                                                        html.Label("表格列配置", className="form-label fw-bold mb-2"),
+                                                        html.P("拖拽字段到下方列区域以设置表格列", className="text-muted small mb-2"),
+                                                        html.Div(id="table-columns-list", children=[
+                                                            html.P("拖拽字段到此处作为第1列", className="text-muted text-center mb-2 small"),
+                                                            html.Div(
+                                                                id="drop-table-col-1",
+                                                                children=[
+                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                ],
+                                                                style={
+                                                                    "min-height": "50px",
+                                                                    "margin-bottom": "10px",
+                                                                    "border": "2px dashed #ced4da",
+                                                                    "borderRadius": "6px",
+                                                                    "padding": "0.5rem"
+                                                                },
+                                                                className="drop-zone",
+                                                            ),
+                                                        ]),
+                                                        dbc.Button("添加列", id="btn-add-table-column", color="link", size="sm", className="p-0 mt-2"),
+                                                    ]),
+                                                    html.Div(id="table-rows-config", style={"display": "none"}, children=[
+                                                        html.Label("表格行配置", className="form-label fw-bold mb-2"),
+                                                        html.P("拖拽字段到下方行区域以设置表格行", className="text-muted small mb-2"),
+                                                        html.Div(id="table-rows-list", children=[
+                                                            html.P("拖拽字段到此处作为第1行", className="text-muted text-center mb-2 small"),
+                                                            html.Div(
+                                                                id="drop-table-row-1",
+                                                                children=[
+                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                ],
+                                                                style={
+                                                                    "min-height": "50px",
+                                                                    "margin-bottom": "10px",
+                                                                    "border": "2px dashed #ced4da",
+                                                                    "borderRadius": "6px",
+                                                                    "padding": "0.5rem"
+                                                                },
+                                                                className="drop-zone",
+                                                            ),
+                                                        ]),
+                                                        dbc.Button("添加行", id="btn-add-table-row", color="link", size="sm", className="p-0 mt-2"),
+                                                    ]),
+                                                ]),
+                                            ]
+                                        ),
+                                    ],
+                                    className="mb-3",
+                                ),
+                            ]),
                             
-                            # 聚合函数
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("聚合函数"),
-                                    dbc.CardBody(
-                                        [
-                                            dbc.Select(
-                                                id="agg-function",
-                                                options=[
-                                                    {"label": "求和 (SUM)", "value": "sum"},
-                                                    {"label": "平均值 (AVG)", "value": "avg"},
-                                                    {"label": "计数 (COUNT)", "value": "count"},
-                                                    {"label": "最大值 (MAX)", "value": "max"},
-                                                    {"label": "最小值 (MIN)", "value": "min"},
-                                                ],
-                                                value="sum",
-                                            ),
-                                        ]
-                                    ),
-                                ],
-                                className="mb-3",
-                            ),
+                            # 聚合函数（非表格图表使用）
+                            html.Div(id="agg-function-card", children=[
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader("聚合函数"),
+                                        dbc.CardBody(
+                                            [
+                                                dbc.Select(
+                                                    id="agg-function",
+                                                    options=[
+                                                        {"label": "求和 (SUM)", "value": "sum"},
+                                                        {"label": "平均值 (AVG)", "value": "avg"},
+                                                        {"label": "计数 (COUNT)", "value": "count"},
+                                                        {"label": "最大值 (MAX)", "value": "max"},
+                                                        {"label": "最小值 (MIN)", "value": "min"},
+                                                    ],
+                                                    value="sum",
+                                                ),
+                                            ]
+                                        ),
+                                    ],
+                                    className="mb-3",
+                                ),
+                            ]),
                             
                             # 样式配置
                             dbc.Card(
@@ -754,6 +831,15 @@ def create_chart_designer_page():
                                                 value="default",
                                                 className="mb-3",
                                             ),
+                                            # 自定义颜色配置（仅在有分组字段时显示）
+                                            html.Div(id="custom-colors-section", children=[
+                                                html.Hr(className="my-3"),
+                                                html.Label("自定义颜色（每个分组使用不同颜色）", className="form-label fw-bold"),
+                                                html.P("当有分组字段时，可以为每个分组设置自定义颜色。颜色将自动确保不重复。", className="text-muted small mb-3"),
+                                                html.Div(id="custom-colors-list", children=[
+                                                    html.P("请先设置分组字段", className="text-muted text-center py-3"),
+                                                ]),
+                                            ], style={"display": "none"}),
                                             dbc.Checklist(
                                                 options=[
                                                     {"label": "显示数据标签", "value": "show-labels"},
@@ -780,8 +866,8 @@ def create_chart_designer_page():
                                             html.Span("图表预览", className="me-auto"),
                                             dbc.ButtonGroup(
                                                 [
-                                                    dbc.Button("保存图表", color="success", size="sm"),
-                                                    dbc.Button("导出图片", color="info", size="sm"),
+                                                    dbc.Button("保存图表", id="btn-save-chart", color="success", size="sm"),
+                                                    dbc.Button("导出图片", id="btn-export-chart-image", color="info", size="sm"),
                                                 ],
                                                 className="float-end",
                                             ),
@@ -790,6 +876,10 @@ def create_chart_designer_page():
                                     ),
                                     dbc.CardBody(
                                         [
+                                            # 保存当前图表配置的Store
+                                            dcc.Store(id="current-chart-config", data=None),
+                                            dcc.Store(id="current-chart-figure", data=None),
+                                            html.Div(id="chart-save-status", children=[], className="mb-2"),
                                             html.Div(id="chart-preview", children=[
                                                 html.P("请选择数据源并配置字段以生成预览", className="text-muted text-center py-5"),
                                             ]),
@@ -1845,20 +1935,201 @@ def load_datasource_fields(datasource_id):
 
 
 @app.callback(
+    [Output("chart-config-normal", "style"),
+     Output("chart-config-table", "style"),
+     Output("agg-function-card", "style"),
+     Output("x-axis-config", "style"),
+     Output("y-axis-label", "children"),
+     Output("y-axis-hint", "children"),
+     Output("group-label", "children"),
+     Output("group-hint", "children")],
+    Input("chart-type", "value")
+)
+def toggle_chart_config(chart_type):
+    """根据图表类型显示/隐藏不同的配置界面，并调整标签文字"""
+    if chart_type == "table":
+        return {"display": "none"}, {"display": "block"}, {"display": "none"}, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    elif chart_type == "pie":
+        # 饼图：隐藏 X 轴，调整 Y 轴和分组标签
+        return (
+            {"display": "block"},  # chart-config-normal
+            {"display": "none"},   # chart-config-table
+            {"display": "block"},  # agg-function-card
+            {"display": "none"},   # x-axis-config (隐藏 X 轴)
+            "数值字段（必需）",                      # y-axis-label
+            "提示：拖拽数值字段到下方区域",          # y-axis-hint
+            "分类字段（必需）",                      # group-label
+            "提示：拖拽分类字段到下方区域"           # group-hint
+        )
+    else:
+        # 其他图表类型：显示所有配置
+        return (
+            {"display": "block"},  # chart-config-normal
+            {"display": "none"},   # chart-config-table
+            {"display": "block"},  # agg-function-card
+            {"display": "block"},  # x-axis-config (显示 X 轴)
+            "Y 轴",                           # y-axis-label
+            "提示：拖拽字段到下方区域",        # y-axis-hint
+            "分组/颜色",                      # group-label
+            "提示：拖拽字段到下方区域"         # group-hint
+        )
+
+@app.callback(
+    [Output("table-columns-config", "style"),
+     Output("table-rows-config", "style"),
+     Output("chart-field-assignments", "data", allow_duplicate=True)],
+    Input("table-orientation", "value"),
+    State("chart-field-assignments", "data"),
+    prevent_initial_call='initial_duplicate'
+)
+def toggle_table_orientation(orientation, assignments):
+    """根据表格方向显示列或行配置，并更新assignments"""
+    assignments = assignments or default_chart_assignments()
+    new_assignments = {
+        'x': assignments.get('x'),
+        'y': list(assignments.get('y', [])),
+        'group': assignments.get('group'),
+        'table_columns': list(assignments.get('table_columns', [])),
+        'table_rows': list(assignments.get('table_rows', [])),
+        'table_orientation': orientation if orientation else 'horizontal'
+    }
+    
+    if orientation == "horizontal":
+        return {"display": "block"}, {"display": "none"}, new_assignments
+    else:
+        return {"display": "none"}, {"display": "block"}, new_assignments
+
+@app.callback(
     [Output("drop-x-axis", "children"),
      Output("drop-y-axis", "children"),
      Output("drop-group", "children")],
-    Input("chart-field-assignments", "data"),
+    [Input("chart-field-assignments", "data"),
+     Input("chart-type", "value")],
     prevent_initial_call=False
 )
-def sync_drop_zones(assignments):
-    """根据字段配置更新拖拽区域显示"""
+def sync_drop_zones(assignments, chart_type):
+    """根据字段配置更新拖拽区域显示（非表格图表）"""
+    if chart_type == "table":
+        return dash.no_update, dash.no_update, dash.no_update
     assignments = assignments or default_chart_assignments()
     return (
         render_assigned_fields(assignments.get('x'), "拖拽字段到此处"),
         render_assigned_fields(assignments.get('y'), "拖拽字段到此处", multiple=True),
         render_assigned_fields(assignments.get('group'), "拖拽字段到此处"),
     )
+
+@app.callback(
+    [Output("custom-colors-section", "style"),
+     Output("custom-colors-list", "children")],
+    [Input("chart-field-assignments", "data"),
+     Input("chart-datasource-select", "value"),
+     Input("chart-type", "value")],
+    State("custom-colors-config", "data"),
+    prevent_initial_call=False
+)
+def update_custom_colors_ui(assignments, datasource_id, chart_type, custom_colors):
+    """根据分组字段显示自定义颜色配置界面"""
+    assignments = assignments or default_chart_assignments()
+    group_field = assignments.get('group')
+    
+    # 如果没有分组字段，隐藏自定义颜色界面
+    if not group_field or chart_type == "table":
+        return {"display": "none"}, html.P("请先设置分组字段", className="text-muted text-center py-3")
+    
+    if not datasource_id:
+        return {"display": "none"}, html.P("请先选择数据源", className="text-muted text-center py-3")
+    
+    try:
+        # 获取数据源配置并加载数据
+        from config_manager import ConfigManager
+        from data_adapter import DataSourceAdapter, DataSourceManager
+        config_manager = ConfigManager()
+        data_source_manager = DataSourceManager()
+        
+        ds_config = config_manager.get_datasource(datasource_id)
+        if not ds_config:
+            return {"display": "none"}, html.P("数据源不存在", className="text-muted text-center py-3")
+        
+        adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+        df = adapter.fetch_data(limit=1000)
+        
+        if df is None or df.empty or group_field not in df.columns:
+            return {"display": "none"}, html.P("无法加载分组数据", className="text-muted text-center py-3")
+        
+        # 获取唯一的分组值
+        unique_groups = sorted(df[group_field].dropna().unique().tolist())
+        custom_colors = custom_colors or {}
+        
+        # 为每个分组创建颜色选择器
+        color_inputs = []
+        default_colors = [
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+        ]
+        
+        for i, group_val in enumerate(unique_groups):
+            group_val_str = str(group_val)
+            current_color = custom_colors.get(group_val_str, default_colors[i % len(default_colors)])
+            
+            color_inputs.append(
+                html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            html.Label(f"{group_val}", className="form-label mb-1 small"),
+                        ], width=4),
+                        dbc.Col([
+                            dbc.Input(
+                                id={"type": "custom-color-input", "group": group_val_str},
+                                type="color",
+                                value=current_color,
+                                className="form-control form-control-color",
+                                style={"width": "100%", "height": "38px"}
+                            ),
+                        ], width=6),
+                        dbc.Col([
+                            html.Div(
+                                current_color,
+                                id={"type": "color-value-display", "group": group_val_str},
+                                className="small text-muted mt-2"
+                            ),
+                        ], width=2),
+                    ], className="align-items-center mb-2"),
+                ])
+            )
+        
+        return {"display": "block"}, html.Div(color_inputs)
+    
+    except Exception as e:
+        return {"display": "none"}, html.P(f"加载分组数据失败：{str(e)}", className="text-danger text-center py-3")
+
+@app.callback(
+    [Output("custom-colors-config", "data", allow_duplicate=True),
+     Output({"type": "color-value-display", "group": ALL}, "children", allow_duplicate=True)],
+    Input({"type": "custom-color-input", "group": ALL}, "value"),
+    State("custom-colors-config", "data"),
+    State({"type": "custom-color-input", "group": ALL}, "id"),
+    prevent_initial_call=True
+)
+def update_custom_colors(color_values, current_colors, color_ids):
+    """更新自定义颜色配置"""
+    if not callback_context.triggered:
+        raise dash.exceptions.PreventUpdate
+    
+    ctx = callback_context
+    current_colors = current_colors or {}
+    new_colors = current_colors.copy()
+    
+    # 更新颜色值
+    for i, color_id in enumerate(color_ids):
+        if i < len(color_values):
+            group_val = color_id.get('group', '')
+            if group_val and color_values[i]:
+                new_colors[group_val] = color_values[i]
+    
+    # 更新显示的颜色值
+    display_values = [new_colors.get(id.get('group', ''), '#000000') for id in color_ids]
+    
+    return new_colors, display_values
 
 
 @app.callback(
@@ -1884,14 +2155,57 @@ def handle_drag_drop_event(event_payload, assignments):
     
     field = event.get('field')
     target = event.get('target')
-    if not field or target not in {'drop-x-axis', 'drop-y-axis', 'drop-group'}:
-        raise dash.exceptions.PreventUpdate
+    
     assignments = assignments or default_chart_assignments()
     new_assignments = {
         'x': assignments.get('x'),
         'y': list(assignments.get('y', [])),
-        'group': assignments.get('group')
+        'group': assignments.get('group'),
+        'table_columns': list(assignments.get('table_columns', [])),
+        'table_rows': list(assignments.get('table_rows', [])),
+        'table_orientation': assignments.get('table_orientation', 'horizontal')
     }
+    
+    # 处理表格列/行的拖拽
+    if target and target.startswith('drop-table-col-'):
+        # 拖拽到表格列
+        col_index_str = target.replace('drop-table-col-', '')
+        try:
+            col_index = int(col_index_str)  # 1-based索引（第几列）
+            # 如果字段已存在，先移除
+            if field in new_assignments['table_columns']:
+                new_assignments['table_columns'].remove(field)
+            # 插入或追加到指定位置
+            col_pos = col_index - 1  # 转换为0-based索引
+            if col_pos < len(new_assignments['table_columns']):
+                new_assignments['table_columns'].insert(col_pos, field)
+            else:
+                new_assignments['table_columns'].append(field)
+        except (ValueError, IndexError):
+            pass
+        return new_assignments
+    elif target and target.startswith('drop-table-row-'):
+        # 拖拽到表格行
+        row_index_str = target.replace('drop-table-row-', '')
+        try:
+            row_index = int(row_index_str)  # 1-based索引（第几行）
+            # 如果字段已存在，先移除
+            if field in new_assignments['table_rows']:
+                new_assignments['table_rows'].remove(field)
+            # 插入或追加到指定位置
+            row_pos = row_index - 1  # 转换为0-based索引
+            if row_pos < len(new_assignments['table_rows']):
+                new_assignments['table_rows'].insert(row_pos, field)
+            else:
+                new_assignments['table_rows'].append(field)
+        except (ValueError, IndexError):
+            pass
+        return new_assignments
+    
+    # 处理普通图表的拖拽
+    if not field or target not in {'drop-x-axis', 'drop-y-axis', 'drop-group'}:
+        raise dash.exceptions.PreventUpdate
+    
     if new_assignments.get('x') == field:
         new_assignments['x'] = None
     if field in new_assignments.get('y', []):
@@ -1939,6 +2253,143 @@ def clear_axis_assignments(clear_x, clear_y, clear_group, assignments):
 
 
 @app.callback(
+    [Output("table-columns-list", "children", allow_duplicate=True),
+     Output("table-rows-list", "children", allow_duplicate=True)],
+    [Input("chart-field-assignments", "data"),
+     Input("chart-type", "value"),
+     Input("btn-add-table-column", "n_clicks"),
+     Input("btn-add-table-row", "n_clicks")],
+    State("table-columns-list", "children"),
+    prevent_initial_call=True
+)
+def sync_table_columns_rows(assignments, chart_type, add_col_clicks, add_row_clicks, current_cols_list):
+    """同步表格列/行的显示"""
+    ctx = callback_context
+    if not ctx.triggered or chart_type != "table":
+        return dash.no_update, dash.no_update
+    
+    assignments = assignments or default_chart_assignments()
+    table_columns = assignments.get('table_columns', [])
+    table_rows = assignments.get('table_rows', [])
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    # 处理添加列/行按钮
+    if trigger_id == "btn-add-table-column":
+        # 添加新的列拖拽区域
+        new_col_index = len(table_columns) + 1
+        col_div = html.Div([
+            html.P(f"拖拽字段到此处作为第{new_col_index}列", className="text-muted text-center mb-2 small"),
+            html.Div(
+                id={"type": "drop-table-col", "index": new_col_index},
+                children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
+                style={
+                    "min-height": "50px",
+                    "margin-bottom": "10px",
+                    "border": "2px dashed #ced4da",
+                    "borderRadius": "6px",
+                    "padding": "0.5rem"
+                },
+                className="drop-zone",
+            ),
+        ])
+        if not current_cols_list:
+            current_cols_list = []
+        current_cols_list.append(col_div)
+        return current_cols_list, dash.no_update
+    
+    elif trigger_id == "btn-add-table-row":
+        # 添加新的行拖拽区域
+        new_row_index = len(table_rows) + 1
+        row_div = html.Div([
+            html.P(f"拖拽字段到此处作为第{new_row_index}行", className="text-muted text-center mb-2 small"),
+            html.Div(
+                id={"type": "drop-table-row", "index": new_row_index},
+                children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
+                style={
+                    "min-height": "50px",
+                    "margin-bottom": "10px",
+                    "border": "2px dashed #ced4da",
+                    "borderRadius": "6px",
+                    "padding": "0.5rem"
+                },
+                className="drop-zone",
+            ),
+        ])
+        return dash.no_update, [row_div]
+    
+    # 根据配置更新列/行显示
+    cols_list = []
+    for i, col in enumerate(table_columns):
+        cols_list.append(html.Div([
+            html.P(f"第{i+1}列: {col}", className="text-muted text-center mb-2 small"),
+            html.Div(
+                id=f"drop-table-col-{i+1}",
+                children=[dbc.Badge(col, color="secondary", pill=True)],
+                style={
+                    "min-height": "50px",
+                    "margin-bottom": "10px",
+                    "border": "2px dashed #ced4da",
+                    "borderRadius": "6px",
+                    "padding": "0.5rem"
+                },
+                className="drop-zone",
+            ),
+        ]))
+    # 总是添加一个空列区域，用于添加新列
+    cols_list.append(html.Div([
+        html.P(f"拖拽字段到此处作为第{len(table_columns)+1}列", className="text-muted text-center mb-2 small"),
+        html.Div(
+            id=f"drop-table-col-{len(table_columns)+1}",
+            children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
+            style={
+                "min-height": "50px",
+                "margin-bottom": "10px",
+                "border": "2px dashed #ced4da",
+                "borderRadius": "6px",
+                "padding": "0.5rem"
+            },
+            className="drop-zone",
+        ),
+    ]))
+    
+    rows_list = []
+    for i, row in enumerate(table_rows):
+        rows_list.append(html.Div([
+            html.P(f"第{i+1}行: {row}", className="text-muted text-center mb-2 small"),
+            html.Div(
+                id=f"drop-table-row-{i+1}",
+                children=[dbc.Badge(row, color="secondary", pill=True)],
+                style={
+                    "min-height": "50px",
+                    "margin-bottom": "10px",
+                    "border": "2px dashed #ced4da",
+                    "borderRadius": "6px",
+                    "padding": "0.5rem"
+                },
+                className="drop-zone",
+            ),
+        ]))
+    # 总是添加一个空行区域，用于添加新行
+    rows_list.append(html.Div([
+        html.P(f"拖拽字段到此处作为第{len(table_rows)+1}行", className="text-muted text-center mb-2 small"),
+        html.Div(
+            id=f"drop-table-row-{len(table_rows)+1}",
+            children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
+            style={
+                "min-height": "50px",
+                "margin-bottom": "10px",
+                "border": "2px dashed #ced4da",
+                "borderRadius": "6px",
+                "padding": "0.5rem"
+            },
+            className="drop-zone",
+        ),
+    ]))
+    
+    return cols_list, rows_list
+
+@app.callback(
     Output("chart-preview", "children"),
     [Input("chart-datasource-select", "value"),
      Input("chart-type", "value"),
@@ -1946,10 +2397,12 @@ def clear_axis_assignments(clear_x, clear_y, clear_group, assignments):
      Input("agg-function", "value"),
      Input("chart-title", "value"),
      Input("color-theme", "value"),
-     Input("chart-options", "value")],
+     Input("chart-options", "value"),
+     Input("table-orientation", "value"),
+     Input("custom-colors-config", "data")],
     prevent_initial_call=False
 )
-def update_chart_preview(datasource_id, chart_type, assignments, agg_function, title, color_theme, options):
+def update_chart_preview(datasource_id, chart_type, assignments, agg_function, title, color_theme, options, table_orientation, custom_colors):
     """根据当前配置生成预览图表"""
     try:
         if not datasource_id:
@@ -1962,10 +2415,66 @@ def update_chart_preview(datasource_id, chart_type, assignments, agg_function, t
         if df is None or df.empty:
             return html.P("数据为空，无法生成图表", className="text-muted text-center py-5")
         assignments = assignments or default_chart_assignments()
-        x_field = assignments.get('x')
-        y_fields = assignments.get('y') or []
-        group_field = assignments.get('group')
-        if chart_type != 'table':
+        options = options or []
+        
+        if chart_type == 'table':
+            # 表格类型：使用列或行配置
+            table_columns = assignments.get('table_columns', []) if assignments else []
+            table_rows = assignments.get('table_rows', []) if assignments else []
+            # 使用最新的表格方向设置
+            if table_orientation:
+                # 更新assignments中的方向
+                if assignments:
+                    assignments['table_orientation'] = table_orientation
+            else:
+                table_orientation = assignments.get('table_orientation', 'horizontal') if assignments else 'horizontal'
+            
+            if table_orientation == 'horizontal':
+                # 横向展示：使用列配置
+                if not table_columns:
+                    return html.P("请拖拽字段到表格列区域", className="text-muted text-center py-5")
+                # 选择指定的列
+                selected_columns = [col for col in table_columns if col in df.columns]
+                if not selected_columns:
+                    return html.P("所选字段不存在于数据中", className="text-muted text-center py-5")
+                # 确保返回DataFrame（使用列表选择确保始终返回DataFrame，即使只有一个列）
+                result = df[selected_columns]
+                if isinstance(result, pd.Series):
+                    table_df: pd.DataFrame = result.to_frame()
+                else:
+                    table_df = result
+                # 确保是DataFrame类型
+                assert isinstance(table_df, pd.DataFrame), "table_df must be a DataFrame"
+            else:
+                # 纵向展示：使用行配置（转置数据）
+                if not table_rows:
+                    return html.P("请拖拽字段到表格行区域", className="text-muted text-center py-5")
+                selected_rows = [row for row in table_rows if row in df.columns]
+                if not selected_rows:
+                    return html.P("所选字段不存在于数据中", className="text-muted text-center py-5")
+                # 转置数据，确保返回DataFrame
+                transposed = df[selected_rows].T
+                if isinstance(transposed, pd.Series):
+                    table_df = transposed.to_frame()
+                else:
+                    table_df = transposed
+                # 确保是DataFrame类型
+                assert isinstance(table_df, pd.DataFrame), "table_df must be a DataFrame"
+                table_df.columns = [f'行{i+1}' for i in range(len(table_df.columns))]
+            
+            chart_config = {
+                "type": "table",
+                "title": title or "数据表格",
+                "limit": 100,
+            }
+            fig = chart_engine.create_chart(table_df, chart_config)
+            return dcc.Graph(figure=fig, id="preview-chart")
+        else:
+            # 普通图表类型：使用X轴/Y轴配置
+            x_field = assignments.get('x')
+            y_fields = assignments.get('y') or []
+            group_field = assignments.get('group')
+            
             if chart_type != 'pie' and not x_field:
                 return html.P("请将字段拖拽到 X 轴", className="text-muted text-center py-5")
             if not y_fields:
@@ -1977,14 +2486,123 @@ def update_chart_preview(datasource_id, chart_type, assignments, agg_function, t
                     return html.P("饼图需要一个数值字段", className="text-muted text-center py-5")
                 if not group_field:
                     group_field = x_field
+            
+            chart_config = {
+                "type": chart_type or "line",
+                "x": x_field,
+                "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
+                "group": group_field,
+                "title": title or "图表预览",
+                "color_theme": color_theme or "default",
+                "custom_colors": custom_colors or {},
+                "show_labels": "show-labels" in options,
+                "show_legend": "show-legend" in options,
+                "agg_function": agg_function or "sum",
+            }
+            fig = chart_engine.create_chart(df, chart_config)
+            return dcc.Graph(figure=fig, id="preview-chart")
+    except Exception as e:
+        return dbc.Alert(f"生成图表失败：{str(e)}", color="danger")
+
+@app.callback(
+    [Output("current-chart-config", "data", allow_duplicate=True),
+     Output("chart-save-status", "children", allow_duplicate=True)],
+    [Input("btn-save-chart", "n_clicks")],
+    [State("chart-datasource-select", "value"),
+     State("chart-type", "value"),
+     State("chart-field-assignments", "data"),
+     State("agg-function", "value"),
+     State("chart-title", "value"),
+     State("color-theme", "value"),
+     State("chart-options", "value"),
+     State("custom-colors-config", "data")],
+    prevent_initial_call=True
+)
+def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors):
+    """保存图表配置"""
+    if not datasource_id:
+        return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2")
+    try:
+        ds_config = config_manager.get_datasource(datasource_id)
+        if not ds_config:
+            return dash.no_update, dbc.Alert("数据源不存在", color="warning", className="m-2")
+        adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+        df = adapter.fetch_data(limit=1000)
+        if df is None or df.empty:
+            return dash.no_update, dbc.Alert("数据为空", color="warning", className="m-2")
+        assignments = assignments or default_chart_assignments()
+        x_field = assignments.get('x')
+        y_fields = assignments.get('y') or []
+        if chart_type != 'table' and not x_field and chart_type != 'pie':
+            return dash.no_update, dbc.Alert("请将字段拖拽到 X 轴", color="warning", className="m-2")
+        if not y_fields:
+            return dash.no_update, dbc.Alert("请至少选择一个 Y 轴字段", color="warning", className="m-2")
+        options = options or []
+        chart_config = {
+            "datasource_id": datasource_id,
+            "type": chart_type or "line",
+            "x": x_field,
+            "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
+            "group": assignments.get('group'),
+            "title": title or "图表预览",
+            "color_theme": color_theme or "default",
+            "custom_colors": custom_colors or {},
+            "show_labels": "show-labels" in options,
+            "show_legend": "show-legend" in options,
+            "agg_function": agg_function or "sum",
+        }
+        chart_config['name'] = title or "未命名图表"
+        config_manager.save_chart(chart_config)
+        return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2")
+    except Exception as e:
+        return dash.no_update, dbc.Alert(f"保存图表失败：{str(e)}", color="danger", className="m-2")
+
+@app.callback(
+    Output("chart-save-status", "children", allow_duplicate=True),
+    [Input("btn-export-chart-image", "n_clicks"),
+     Input("export-png", "n_clicks"),
+     Input("export-pdf", "n_clicks"),
+     Input("export-html", "n_clicks")],
+    [State("chart-datasource-select", "value"),
+     State("chart-type", "value"),
+     State("chart-field-assignments", "data"),
+     State("agg-function", "value"),
+     State("chart-title", "value"),
+     State("color-theme", "value"),
+     State("chart-options", "value"),
+     State("custom-colors-config", "data")],
+    prevent_initial_call=True
+)
+def export_chart(png_clicks, png_dropdown, pdf_clicks, html_clicks, 
+                 datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors):
+    """导出图表"""
+    ctx = callback_context
+    if not ctx.triggered or not datasource_id:
+        return dash.no_update
+    
+    trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    try:
+        ds_config = config_manager.get_datasource(datasource_id)
+        if not ds_config:
+            return dbc.Alert("数据源不存在", color="warning", className="m-2")
+        adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+        df = adapter.fetch_data(limit=1000)
+        if df is None or df.empty:
+            return dbc.Alert("数据为空", color="warning", className="m-2")
+        assignments = assignments or default_chart_assignments()
+        x_field = assignments.get('x')
+        y_fields = assignments.get('y') or []
+        group_field = assignments.get('group')
         options = options or []
         chart_config = {
             "type": chart_type or "line",
             "x": x_field,
             "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
             "group": group_field,
-            "title": title or "图表预览",
+            "title": title or "图表",
             "color_theme": color_theme or "default",
+            "custom_colors": custom_colors or {},
             "show_labels": "show-labels" in options,
             "show_legend": "show-legend" in options,
             "agg_function": agg_function or "sum",
@@ -1992,9 +2610,34 @@ def update_chart_preview(datasource_id, chart_type, assignments, agg_function, t
         if chart_type == 'table':
             chart_config['limit'] = 100
         fig = chart_engine.create_chart(df, chart_config)
-        return dcc.Graph(figure=fig, id="preview-chart")
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        chart_title = (title or "chart").replace(" ", "_").replace("/", "_")
+        
+        if trigger_id in ["btn-export-chart-image", "export-png"]:
+            # 导出为PNG
+            export_path = EXPORT_DIR / f"{chart_title}_{timestamp}.png"
+            fig.write_image(str(export_path), width=1200, height=600)
+            return dbc.Alert(f"图表已导出为PNG：{export_path}", color="success", className="m-2")
+        
+        elif trigger_id == "export-pdf":
+            # 导出为PDF
+            export_path = EXPORT_DIR / f"{chart_title}_{timestamp}.pdf"
+            fig.write_image(str(export_path), format="pdf", width=1200, height=600)
+            return dbc.Alert(f"图表已导出为PDF：{export_path}", color="success", className="m-2")
+        
+        elif trigger_id == "export-html":
+            # 导出为HTML
+            export_path = EXPORT_DIR / f"{chart_title}_{timestamp}.html"
+            fig.write_html(str(export_path))
+            return dbc.Alert(f"图表已导出为HTML：{export_path}", color="success", className="m-2")
+        
+        return dash.no_update
     except Exception as e:
-        return dbc.Alert(f"生成图表失败：{str(e)}", color="danger")
+        error_msg = str(e)
+        if "kaleido" in error_msg.lower() or "orca" in error_msg.lower():
+            return dbc.Alert("导出图片需要安装kaleido包。请运行: pip install kaleido", color="warning", className="m-2")
+        return dbc.Alert(f"导出图表失败：{error_msg}", color="danger", className="m-2")
 
 # ==========================================
 # 仪表盘回调函数

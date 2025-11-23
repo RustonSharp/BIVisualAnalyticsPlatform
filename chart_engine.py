@@ -156,15 +156,68 @@ class ChartEngine:
                 markers=True
             )
         
-        # 应用颜色主题
-        if color_theme in self.COLOR_THEMES:
+        # 应用颜色主题或自定义颜色
+        custom_colors = config.get('custom_colors', {})  # {group_value: color}
+        if custom_colors and group:
+            # 使用自定义颜色映射
+            color_map = custom_colors
+            # 为每个分组设置颜色，确保不重复
+            unique_groups = data[group].unique() if group in data.columns else []
+            color_sequence = []
+            theme_colors = self.COLOR_THEMES.get(color_theme, self.COLOR_THEMES['default'])
+            if not isinstance(theme_colors, list):
+                theme_colors = list(theme_colors) if hasattr(theme_colors, '__iter__') else [theme_colors]
+            theme_colors = [str(c) for c in theme_colors if c]
+            
+            # 构建颜色序列，优先使用自定义颜色，然后使用主题颜色
+            used_colors = set()
+            for group_val in unique_groups:
+                group_val_str = str(group_val)
+                if group_val_str in color_map:
+                    # 使用自定义颜色
+                    custom_color = color_map[group_val_str]
+                    if custom_color not in used_colors:
+                        color_sequence.append(custom_color)
+                        used_colors.add(custom_color)
+                    else:
+                        # 自定义颜色重复，使用主题颜色
+                        for theme_color in theme_colors:
+                            if theme_color not in used_colors:
+                                color_sequence.append(theme_color)
+                                used_colors.add(theme_color)
+                                break
+                else:
+                    # 使用主题颜色，确保不重复
+                    for theme_color in theme_colors:
+                        if theme_color not in used_colors:
+                            color_sequence.append(theme_color)
+                            used_colors.add(theme_color)
+                            break
+                    # 如果主题颜色都用完了，循环使用
+                    if len(color_sequence) <= len(unique_groups):
+                        remaining = len(unique_groups) - len(color_sequence)
+                        while len(color_sequence) < len(unique_groups):
+                            color_sequence.extend(theme_colors[:remaining])
+                            remaining = len(unique_groups) - len(color_sequence)
+            
+            if color_sequence:
+                fig.update_layout(color_discrete_map={str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])})
+        elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表
             if not isinstance(colors, list):
                 colors = list(colors) if hasattr(colors, '__iter__') else [colors]
+            colors = [str(c) for c in colors if c]
             if group:
-                # 对于分组图表，使用 color_discrete_sequence
-                fig.update_layout(colorway=colors)
+                # 对于分组图表，确保每个组使用不同颜色
+                unique_groups = data[group].unique() if group in data.columns else []
+                num_groups = len(unique_groups)
+                # 如果分组数量超过颜色数量，扩展颜色列表（循环使用）
+                if num_groups > len(colors):
+                    extended_colors = (colors * ((num_groups // len(colors)) + 1))[:num_groups]
+                    colors = extended_colors
+                # 使用 color_discrete_sequence 确保每个组颜色不同
+                fig.update_layout(color_discrete_sequence=colors[:num_groups] if num_groups > 0 else colors)
             else:
                 # 对于单线条图表，直接设置颜色
                 if colors:
@@ -215,17 +268,57 @@ class ChartEngine:
                 title=title
             )
         
-        # 应用颜色主题
-        if color_theme in self.COLOR_THEMES:
+        # 应用颜色主题或自定义颜色
+        custom_colors = config.get('custom_colors', {})  # {group_value: color}
+        if custom_colors and group:
+            # 使用自定义颜色映射
+            unique_groups = data[group].unique() if group in data.columns else []
+            color_map = custom_colors
+            color_sequence = []
+            theme_colors = self.COLOR_THEMES.get(color_theme, self.COLOR_THEMES['default'])
+            if not isinstance(theme_colors, list):
+                theme_colors = list(theme_colors) if hasattr(theme_colors, '__iter__') else [theme_colors]
+            theme_colors = [str(c) for c in theme_colors if c]
+            
+            used_colors = set()
+            for group_val in unique_groups:
+                group_val_str = str(group_val)
+                if group_val_str in color_map:
+                    custom_color = color_map[group_val_str]
+                    if custom_color not in used_colors:
+                        color_sequence.append(custom_color)
+                        used_colors.add(custom_color)
+                    else:
+                        for theme_color in theme_colors:
+                            if theme_color not in used_colors:
+                                color_sequence.append(theme_color)
+                                used_colors.add(theme_color)
+                                break
+                else:
+                    for theme_color in theme_colors:
+                        if theme_color not in used_colors:
+                            color_sequence.append(theme_color)
+                            used_colors.add(theme_color)
+                            break
+            
+            if color_sequence:
+                fig.update_layout(color_discrete_map={str(k): v for k, v in zip(unique_groups, color_sequence[:len(unique_groups)])})
+        elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表且所有元素都是字符串
             if not isinstance(colors, list):
                 colors = list(colors) if hasattr(colors, '__iter__') else [colors]
             colors = [str(c) for c in colors if c]
             if group:
-                # 对于分组图表，使用 colorway 布局属性
-                if colors:
-                    fig.update_layout(colorway=colors)
+                # 对于分组图表，确保每个组使用不同颜色
+                unique_groups = data[group].unique() if group in data.columns else []
+                num_groups = len(unique_groups)
+                # 如果分组数量超过颜色数量，扩展颜色列表（循环使用）
+                if num_groups > len(colors):
+                    extended_colors = (colors * ((num_groups // len(colors)) + 1))[:num_groups]
+                    colors = extended_colors
+                # 使用 color_discrete_sequence 确保每个组颜色不同
+                fig.update_layout(color_discrete_sequence=colors[:num_groups] if num_groups > 0 else colors)
             else:
                 # 对于单柱状图，设置 marker color（必须是颜色字符串）
                 if colors:
@@ -266,20 +359,74 @@ class ChartEngine:
             title=title
         )
         
-        # 应用颜色主题
-        if color_theme in self.COLOR_THEMES:
+        # 应用颜色主题或自定义颜色
+        custom_colors = config.get('custom_colors', {})  # {group_value: color}
+        unique_groups = data[group].unique() if group in data.columns else []
+        num_values = len(unique_groups)
+        
+        if custom_colors and group:
+            # 使用自定义颜色映射
+            color_sequence = []
+            theme_colors = self.COLOR_THEMES.get(color_theme, self.COLOR_THEMES['default'])
+            if not isinstance(theme_colors, list):
+                theme_colors = list(theme_colors) if hasattr(theme_colors, '__iter__') else [theme_colors]
+            theme_colors = [str(c) for c in theme_colors if c]
+            
+            used_colors = set()
+            for group_val in unique_groups:
+                group_val_str = str(group_val)
+                if group_val_str in custom_colors:
+                    custom_color = custom_colors[group_val_str]
+                    if custom_color not in used_colors:
+                        color_sequence.append(custom_color)
+                        used_colors.add(custom_color)
+                    else:
+                        # 自定义颜色重复，使用主题颜色
+                        for theme_color in theme_colors:
+                            if theme_color not in used_colors:
+                                color_sequence.append(theme_color)
+                                used_colors.add(theme_color)
+                                break
+                else:
+                    # 使用主题颜色，确保不重复
+                    for theme_color in theme_colors:
+                        if theme_color not in used_colors:
+                            color_sequence.append(theme_color)
+                            used_colors.add(theme_color)
+                            break
+            # 如果颜色不够，扩展主题颜色
+            while len(color_sequence) < num_values:
+                for theme_color in theme_colors:
+                    if len(color_sequence) >= num_values:
+                        break
+                    color_sequence.append(theme_color)
+            
+            if color_sequence:
+                fig.update_traces(marker_colors=color_sequence[:num_values])
+        elif color_theme in self.COLOR_THEMES:
             colors = self.COLOR_THEMES[color_theme]
             # 确保 colors 是列表
             if not isinstance(colors, list):
                 colors = list(colors) if hasattr(colors, '__iter__') else [colors]
-            # 对于饼图，使用 marker colors
+            colors = [str(c) for c in colors if c]
+            # 对于饼图，确保每个组使用不同颜色
             if colors:
-                # 如果数据点数量超过颜色数量，需要扩展颜色列表
-                num_values = len(data[group].unique()) if group in data.columns else len(data)
+                # 如果数据点数量超过颜色数量，扩展颜色列表（循环使用，但确保不重复）
                 if num_values > len(colors):
-                    # 重复颜色列表
-                    extended_colors = (colors * ((num_values // len(colors)) + 1))[:num_values]
-                    colors = extended_colors
+                    # 扩展颜色列表，但尽量使用不同颜色
+                    extended_colors = []
+                    used_colors = set()
+                    for _ in range(num_values):
+                        for color in colors:
+                            if color not in used_colors:
+                                extended_colors.append(color)
+                                used_colors.add(color)
+                                break
+                        else:
+                            # 所有颜色都用过了，循环使用
+                            extended_colors.extend(colors * ((num_values - len(extended_colors)) // len(colors) + 1))
+                            break
+                    colors = extended_colors[:num_values]
                 fig.update_traces(marker_colors=colors[:num_values])
         
         # 数据标签
