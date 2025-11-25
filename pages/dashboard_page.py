@@ -62,6 +62,8 @@ def create_dashboard_page():
                                     dbc.Button([html.I(className="fas fa-filter me-1"), "清除筛选"], 
                                               id="btn-clear-chart-filter", color="warning", size="sm", outline=True, 
                                               style={"display": "none"}),
+                                    dbc.Button([html.I(className="fas fa-share-alt me-1"), "分享链接"], 
+                                              id="btn-share-dashboard", color="primary", size="sm", outline=True),
                                     dbc.ButtonGroup([
                                         dbc.Button([html.I(className="fas fa-image me-1"), "PNG"], 
                                                   id="btn-export-dashboard-png", color="info", size="sm", outline=True),
@@ -172,6 +174,42 @@ def create_dashboard_page():
                 id="modal-add-chart-to-dashboard",
                 is_open=False,
             ),
+            
+            # 分享链接模态框
+            dbc.Modal(
+                [
+                    dbc.ModalHeader("分享仪表盘链接"),
+                    dbc.ModalBody(
+                        [
+                            html.P("复制下面的链接分享给其他人，他们可以直接访问此仪表盘：", className="mb-3"),
+                            dbc.InputGroup(
+                                [
+                                    dbc.Input(id="share-link-input", readonly=True, value=""),
+                                    dbc.Button(
+                                        [html.I(className="fas fa-copy me-1"), "复制"],
+                                        id="btn-copy-share-link",
+                                        color="primary",
+                                        outline=True
+                                    ),
+                                ],
+                                className="mb-3"
+                            ),
+                            html.Div(id="share-link-copy-status", children=[]),
+                            html.Hr(),
+                            html.P([
+                                html.Strong("提示："), " 分享的链接包含当前仪表盘的ID，访问者将看到相同的仪表盘内容。",
+                            ], className="text-muted small mb-0"),
+                        ]
+                    ),
+                    dbc.ModalFooter(
+                        [
+                            dbc.Button("关闭", id="btn-close-share-modal", color="secondary"),
+                        ]
+                    ),
+                ],
+                id="modal-share-dashboard",
+                is_open=False,
+            ),
         ],
         fluid=True,
     )
@@ -195,10 +233,11 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         [Output("dashboard-selector", "options"),
          Output("dashboard-selector", "value")],
         [Input("url", "pathname"),
+         Input("url", "search"),
          Input("dashboard-refresh-trigger", "data")],
         prevent_initial_call=False
     )
-    def load_dashboard_list(pathname, refresh_trigger):
+    def load_dashboard_list(pathname, search, refresh_trigger):
         """加载仪表盘列表"""
         if pathname == "/dashboard":
             dashboards = config_manager.load_dashboards()
@@ -206,7 +245,23 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 {"label": db.get('name', '未命名仪表盘'), "value": db.get('id')}
                 for db in dashboards if db.get('id')
             ]
-            selected = options[0]["value"] if options else None
+            
+            # 从URL参数中获取dashboard_id
+            selected = None
+            if search:
+                from urllib.parse import parse_qs, urlparse
+                parsed = urlparse(f"?{search}" if not search.startswith('?') else search)
+                params = parse_qs(parsed.query)
+                if 'dashboard_id' in params and params['dashboard_id']:
+                    dashboard_id_from_url = params['dashboard_id'][0]
+                    # 验证该ID是否存在于仪表盘列表中
+                    if any(opt['value'] == dashboard_id_from_url for opt in options):
+                        selected = dashboard_id_from_url
+            
+            # 如果没有从URL获取到，使用第一个
+            if not selected:
+                selected = options[0]["value"] if options else None
+            
             if not options:
                 options = [{"label": "暂无仪表盘，请创建", "value": None, "disabled": True}]
             return options, selected
@@ -1209,4 +1264,105 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             return {"display": "inline-block"}, status_badge
         
         return {"display": "none"}, html.Div()
+
+    @app.callback(
+        [Output("modal-share-dashboard", "is_open"),
+         Output("share-link-input", "value")],
+        [Input("btn-share-dashboard", "n_clicks"),
+         Input("btn-close-share-modal", "n_clicks")],
+        [State("modal-share-dashboard", "is_open"),
+         State("current-dashboard-id", "data")],
+        prevent_initial_call=True
+    )
+    def toggle_share_modal(share_clicks, close_clicks, is_open, dashboard_id):
+        """打开/关闭分享链接模态框"""
+        ctx = callback_context
+        if not ctx.triggered:
+            return dash.no_update, dash.no_update
+        
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        
+        if trigger_id == "btn-share-dashboard" and share_clicks:
+            if not dashboard_id:
+                return dash.no_update, dash.no_update
+            
+            # 生成分享链接
+            # 获取当前的主机地址（可以从环境变量或配置中获取，这里使用默认值）
+            import os
+            base_url = os.getenv("DASH_APP_URL", "http://localhost:8050")
+            share_link = f"{base_url}/dashboard?dashboard_id={dashboard_id}"
+            
+            return True, share_link
+        
+        elif trigger_id == "btn-close-share-modal":
+            return False, dash.no_update
+        
+        return dash.no_update, dash.no_update
+
+    @app.callback(
+        Output("share-link-copy-status", "children", allow_duplicate=True),
+        Input("btn-copy-share-link", "n_clicks"),
+        State("share-link-input", "value"),
+        prevent_initial_call=True
+    )
+    def copy_share_link(copy_clicks, link_value):
+        """复制分享链接到剪贴板"""
+        if copy_clicks and link_value:
+            # 返回成功消息（实际复制由客户端JavaScript完成）
+            return dbc.Alert(
+                [
+                    html.I(className="fas fa-check-circle me-2"),
+                    "链接已复制到剪贴板！",
+                ],
+                color="success",
+                className="mt-2"
+            )
+        return dash.no_update
+
+    # 客户端回调：使用JavaScript复制到剪贴板
+    app.clientside_callback(
+        """
+        function(n_clicks, link_value) {
+            if (n_clicks && link_value) {
+                // 尝试使用现代 Clipboard API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(link_value).then(function() {
+                        console.log('链接已复制到剪贴板');
+                    }).catch(function(err) {
+                        console.error('Clipboard API 复制失败:', err);
+                        // 降级到 execCommand 方法
+                        fallbackCopy(link_value);
+                    });
+                } else {
+                    // 降级到 execCommand 方法
+                    fallbackCopy(link_value);
+                }
+            }
+            return window.dash_clientside.no_update;
+        }
+        function fallbackCopy(text) {
+            const tempInput = document.createElement('input');
+            tempInput.value = text;
+            tempInput.style.position = 'fixed';
+            tempInput.style.opacity = '0';
+            tempInput.style.left = '-9999px';
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            tempInput.setSelectionRange(0, 99999); // 对于移动设备
+            
+            try {
+                document.execCommand('copy');
+                console.log('链接已复制到剪贴板（使用 fallback 方法）');
+            } catch (err) {
+                console.error('复制失败:', err);
+            } finally {
+                document.body.removeChild(tempInput);
+            }
+        }
+        """,
+        Output("share-link-input", "value", allow_duplicate=True),
+        [Input("btn-copy-share-link", "n_clicks")],
+        [State("share-link-input", "value")],
+        prevent_initial_call=True
+    )
 
