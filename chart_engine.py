@@ -66,11 +66,23 @@ class ChartEngine:
             raise ValueError(f"不支持的图表类型: {chart_type}")
     
     def _aggregate_data(self, data: pd.DataFrame, config: Dict[str, Any]) -> pd.DataFrame:
-        """数据聚合"""
-        agg_function = config.get('agg_function', 'sum')
+        """
+        数据聚合
+        
+        支持：
+        1. 单个聚合函数（agg_function）- 所有Y轴字段使用相同聚合函数
+        2. 多个聚合函数（agg_functions）- 每个Y轴字段可以使用不同的聚合函数
+        3. 占比计算（percentage）
+        4. 自定义计算公式（custom_formula）
+        """
+        # 支持新的多聚合函数配置，向后兼容旧的单一聚合函数配置
+        agg_functions = config.get('agg_functions', {})  # {field: function}
+        agg_function = config.get('agg_function', 'sum')  # 向后兼容
+        
         x = config.get('x')
         y = config.get('y', [])
         group = config.get('group')
+        custom_formula = config.get('custom_formula')  # 自定义计算公式
         
         if not x or not y:
             return data
@@ -83,41 +95,142 @@ class ChartEngine:
             elif isinstance(group, list):
                 group_cols.extend(group)
         
-        # 聚合函数映射
-        agg_dict = {}
+        # 转换y为列表格式
         if isinstance(y, str):
             y = [y]
         
+        # 先执行标准聚合（如果需要）
+        agg_dict = {}
+        needs_percentage = {}
+        
         for col in y:
+            # 优先使用多聚合函数配置
+            if isinstance(agg_functions, dict) and col in agg_functions:
+                func = agg_functions[col]
+            else:
+                func = agg_function  # 使用默认聚合函数
+            
             if pd.api.types.is_numeric_dtype(data[col]):
-                if agg_function == 'sum':
+                if func == 'sum':
                     agg_dict[col] = 'sum'
-                elif agg_function == 'avg':
+                elif func == 'avg' or func == 'mean':
                     agg_dict[col] = 'mean'
-                elif agg_function == 'count':
+                elif func == 'count':
                     agg_dict[col] = 'count'
-                elif agg_function == 'max':
+                elif func == 'max':
                     agg_dict[col] = 'max'
-                elif agg_function == 'min':
+                elif func == 'min':
                     agg_dict[col] = 'min'
+                elif func == 'percentage':
+                    # 标记需要计算占比
+                    agg_dict[col] = 'sum'  # 先求和，后续计算占比
+                    needs_percentage[col] = True
+                else:
+                    # 默认使用sum
+                    agg_dict[col] = 'sum'
             else:
                 agg_dict[col] = 'count'
         
+        # 执行分组聚合
         if agg_dict:
-            # 执行分组聚合
             grouped_result = data.groupby(group_cols, as_index=False).agg(agg_dict)
-            # 类型转换：groupby().agg() 在 as_index=False 时应该返回 DataFrame
-            # 但在某些情况下类型检查器无法正确推断，需要显式转换
+            # 类型转换
             if not isinstance(grouped_result, pd.DataFrame):
-                # 如果返回的不是 DataFrame，尝试转换
                 data = pd.DataFrame(grouped_result) if hasattr(grouped_result, 'to_frame') else data
             else:
                 data = grouped_result
-            # 重命名聚合后的列
-            for col in y:
-                if col in data.columns and col in agg_dict:
-                    if agg_dict[col] == 'mean':
-                        data = data.rename(columns={col: col})
+            
+            # 计算占比（如果需要）
+            for col in needs_percentage:
+                if col in data.columns:
+                    total = data[col].sum()
+                    if total != 0:
+                        # 计算占比：每个值占总和的百分比
+                        data[col] = (data[col] / total * 100).round(2)  # 转换为百分比
+                        # 保持原字段名，图表将显示百分比值
+        
+        # 应用自定义计算公式
+        if custom_formula and isinstance(custom_formula, dict):
+            data = self._apply_custom_formula(data, custom_formula, y)
+        
+        return data
+    
+    def _apply_custom_formula(self, data: pd.DataFrame, formula_config: Dict[str, Any], y_fields: List[str]) -> pd.DataFrame:
+        """
+        应用自定义计算公式
+        
+        Args:
+            data: 聚合后的数据
+            formula_config: 公式配置
+                - type: 公式类型 ('growth_rate', 'year_over_year', 'custom')
+                - field: 要计算的字段
+                - period_field: 周期字段（用于增长率、同比）
+                - formula: 自定义公式表达式（字符串）
+            y_fields: Y轴字段列表
+        
+        Returns:
+            应用公式后的DataFrame
+        """
+        formula_type = formula_config.get('type', 'custom')
+        field = formula_config.get('field')
+        
+        if not field or field not in data.columns:
+            return data
+        
+        try:
+            if formula_type == 'growth_rate':
+                # 计算增长率（环比）
+                # 需要按周期字段排序
+                period_field = formula_config.get('period_field')
+                if period_field and period_field in data.columns:
+                    data = data.sort_values(by=period_field).reset_index(drop=True)
+                    data[f'{field}_growth'] = data[field].pct_change().fillna(0) * 100
+                    # 将字段名加入y_fields
+                    if f'{field}_growth' not in y_fields:
+                        y_fields.append(f'{field}_growth')
+            
+            elif formula_type == 'year_over_year':
+                # 计算同比增长率
+                period_field = formula_config.get('period_field')
+                if period_field and period_field in data.columns:
+                    # 假设周期字段可以提取年份
+                    data = data.sort_values(by=period_field).reset_index(drop=True)
+                    # 简化实现：如果有年份字段，计算同比
+                    # 实际应该根据具体数据结构调整
+                    if 'year' in data.columns or any('year' in str(col).lower() for col in data.columns):
+                        year_col = next((col for col in data.columns if 'year' in str(col).lower()), None)
+                        if year_col:
+                            data[f'{field}_yoy'] = data.groupby([c for c in data.columns if c != field and c != period_field])[field].pct_change().fillna(0) * 100
+            
+            elif formula_type == 'custom':
+                # 自定义公式
+                formula_expr = formula_config.get('formula')
+                if formula_expr:
+                    # 安全的公式计算（仅支持基本数学运算）
+                    # 使用eval计算，但限制可用函数
+                    allowed_names = {
+                        '__builtins__': {},
+                        'abs': abs,
+                        'round': round,
+                        'sum': sum,
+                        'max': max,
+                        'min': min,
+                    }
+                    # 将DataFrame的列名加入命名空间
+                    for col in data.columns:
+                        if pd.api.types.is_numeric_dtype(data[col]):
+                            allowed_names[col] = data[col]
+                    
+                    try:
+                        result_col = formula_config.get('result_field', f'{field}_calculated')
+                        data[result_col] = eval(formula_expr, allowed_names)
+                        if result_col not in y_fields:
+                            y_fields.append(result_col)
+                    except Exception as e:
+                        print(f"自定义公式计算失败: {str(e)}")
+        
+        except Exception as e:
+            print(f"应用自定义公式时出错: {str(e)}")
         
         return data
     

@@ -18,6 +18,7 @@ def create_chart_designer_page():
             html.H2("图表设计器", className="mb-4"),
             dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
             dcc.Store(id="custom-colors-config", data={}),
+            dcc.Store(id="field-agg-functions-config", data={}),  # 存储每个字段的聚合函数配置
             dcc.Input(id="dnd-last-event", type="text", value="", style={"display": "none"}),
             
             dbc.Row(
@@ -239,20 +240,30 @@ def create_chart_designer_page():
                             html.Div(id="agg-function-card", children=[
                                 dbc.Card(
                                     [
-                                        dbc.CardHeader("聚合函数"),
+                                        dbc.CardHeader("聚合函数配置"),
                                         dbc.CardBody(
                                             [
-                                                dbc.Select(
-                                                    id="agg-function",
-                                                    options=[
-                                                        {"label": "求和 (SUM)", "value": "sum"},
-                                                        {"label": "平均值 (AVG)", "value": "avg"},
-                                                        {"label": "计数 (COUNT)", "value": "count"},
-                                                        {"label": "最大值 (MAX)", "value": "max"},
-                                                        {"label": "最小值 (MIN)", "value": "min"},
-                                                    ],
-                                                    value="sum",
-                                                ),
+                                                html.Div([
+                                                    html.Label("默认聚合函数（所有Y轴字段）", className="form-label mb-2"),
+                                                    dbc.Select(
+                                                        id="agg-function",
+                                                        options=[
+                                                            {"label": "求和 (SUM)", "value": "sum"},
+                                                            {"label": "平均值 (AVG)", "value": "avg"},
+                                                            {"label": "计数 (COUNT)", "value": "count"},
+                                                            {"label": "最大值 (MAX)", "value": "max"},
+                                                            {"label": "最小值 (MIN)", "value": "min"},
+                                                            {"label": "占比 (Percentage)", "value": "percentage"},
+                                                        ],
+                                                        value="sum",
+                                                        className="mb-3",
+                                                    ),
+                                                ]),
+                                                html.Div(id="field-agg-functions", children=[
+                                                    html.Label("各字段聚合函数（可选）", className="form-label mb-2"),
+                                                    html.P("可以为每个Y轴字段单独设置聚合函数。如果不设置，将使用默认聚合函数。", 
+                                                          className="text-muted small mb-2"),
+                                                ]),
                                             ]
                                         ),
                                     ],
@@ -314,12 +325,24 @@ def create_chart_designer_page():
                                     dbc.CardHeader(
                                         [
                                             html.Span("已保存图表", className="me-auto"),
-                                            dbc.Button(
-                                                [html.I(className="fas fa-sync me-1"), "刷新"],
-                                                id="btn-refresh-saved-charts",
-                                                color="link",
-                                                size="sm",
-                                                className="p-0"
+                                            dbc.ButtonGroup(
+                                                [
+                                                    dbc.Button(
+                                                        [html.I(className="fas fa-plus me-1"), "新增"],
+                                                        id="btn-new-chart",
+                                                        color="success",
+                                                        size="sm",
+                                                        outline=True
+                                                    ),
+                                                    dbc.Button(
+                                                        [html.I(className="fas fa-sync me-1"), "刷新"],
+                                                        id="btn-refresh-saved-charts",
+                                                        color="link",
+                                                        size="sm",
+                                                        className="p-0"
+                                                    ),
+                                                ],
+                                                className="d-flex gap-1",
                                             ),
                                         ],
                                         className="d-flex justify-content-between align-items-center",
@@ -474,7 +497,8 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 {"label": ds.get('name', 'Unnamed'), "value": ds.get('id')}
                 for ds in datasources if ds.get('id')
             ]
-            selected = options[0]["value"] if options else None
+            # 初始加载时不自动选择数据源，显示空图表
+            selected = None
             if not options:
                 options = [{"label": "请先添加数据源", "value": None, "disabled": True}]
             return options, selected
@@ -500,6 +524,54 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
          Output("chart-type", "value", allow_duplicate=True),
          Output("chart-field-assignments", "data", allow_duplicate=True),
          Output("agg-function", "value", allow_duplicate=True),
+         Output("field-agg-functions-config", "data", allow_duplicate=True),
+         Output("chart-title", "value", allow_duplicate=True),
+         Output("color-theme", "value", allow_duplicate=True),
+         Output("chart-options", "value", allow_duplicate=True),
+         Output("custom-colors-config", "data", allow_duplicate=True),
+         Output("table-orientation", "value", allow_duplicate=True),
+         Output("chart-save-status", "children", allow_duplicate=True)],
+        Input("url", "pathname"),
+        State("editing-chart-id", "data"),
+        prevent_initial_call='initial_duplicate'
+    )
+    def initialize_chart_designer(pathname, current_editing_id):
+        """初始化图表设计器 - 进入页面时自动显示空图表"""
+        # 只有进入图表设计器页面时才执行
+        if pathname != "/chart-designer":
+            return [dash.no_update] * 12
+        
+        # 如果正在编辑某个图表，不清空（保持编辑状态）
+        # 如果没有任何编辑状态，自动清空并显示空图表
+        if current_editing_id is not None:
+            # 正在编辑图表，不清空
+            return [dash.no_update] * 12
+        
+        # 重置为默认值（空图表状态）
+        assignments = default_chart_assignments()
+        
+        return (
+            None,  # editing-chart-id: 清空编辑状态
+            None,  # chart-datasource-select: 清空数据源选择
+            "line",  # chart-type: 默认折线图
+            assignments,  # chart-field-assignments: 重置字段配置
+            "sum",  # agg-function: 默认求和
+            {},  # field-agg-functions-config: 清空字段聚合函数配置
+            "",  # chart-title: 清空标题
+            "default",  # color-theme: 默认主题
+            ["show-legend"],  # chart-options: 默认只显示图例
+            {},  # custom-colors-config: 清空自定义颜色
+            "horizontal",  # table-orientation: 默认横向
+            html.P("", className="mb-0")  # chart-save-status: 清空状态信息
+        )
+
+    @app.callback(
+        [Output("editing-chart-id", "data", allow_duplicate=True),
+         Output("chart-datasource-select", "value", allow_duplicate=True),
+         Output("chart-type", "value", allow_duplicate=True),
+         Output("chart-field-assignments", "data", allow_duplicate=True),
+         Output("agg-function", "value", allow_duplicate=True),
+         Output("field-agg-functions-config", "data", allow_duplicate=True),
          Output("chart-title", "value", allow_duplicate=True),
          Output("color-theme", "value", allow_duplicate=True),
          Output("chart-options", "value", allow_duplicate=True),
@@ -513,20 +585,20 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         """加载图表配置到设计器（编辑）"""
         ctx = callback_context
         if not ctx.triggered:
-            return [dash.no_update] * 11
+            return [dash.no_update] * 12
         
         trigger_id = ctx.triggered[0]["prop_id"]
         
         try:
             if "edit-saved-chart" not in trigger_id:
-                return [dash.no_update] * 11
+                return [dash.no_update] * 12
             
             chart_id_dict = json.loads(trigger_id.split(".")[0])
             chart_id = chart_id_dict.get("chart_id")
             
             chart_config = config_manager.get_chart(chart_id)
             if not chart_config:
-                no_updates = [dash.no_update] * 10
+                no_updates = [dash.no_update] * 11
                 no_updates.append(dbc.Alert("图表不存在", color="danger", className="m-2"))
                 return tuple(no_updates)
             
@@ -555,6 +627,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 chart_config.get('type', 'line'),
                 assignments,
                 chart_config.get('agg_function', 'sum'),
+                chart_config.get('agg_functions', {}),  # 加载字段聚合函数配置
                 chart_config.get('title', chart_config.get('name', '')),
                 chart_config.get('color_theme', 'default'),
                 options,
@@ -563,11 +636,11 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 dbc.Alert("图表配置已加载，可以开始编辑", color="success", className="m-2")
             )
         except Exception as e:
-            no_updates = [dash.no_update] * 10
+            no_updates = [dash.no_update] * 11
             no_updates.append(dbc.Alert(f"加载图表失败：{str(e)}", color="danger", className="m-2"))
             return tuple(no_updates)
         
-        return [dash.no_update] * 11
+        return [dash.no_update] * 12
 
     @app.callback(
         [Output("saved-charts-list", "children", allow_duplicate=True),
@@ -1106,11 +1179,75 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         return cols_list, rows_list
 
     @app.callback(
+        Output("field-agg-functions", "children"),
+        [Input("chart-field-assignments", "data"),
+         Input("agg-function", "value")],
+        State("field-agg-functions-config", "data"),
+        prevent_initial_call=False
+    )
+    def update_field_agg_functions_ui(assignments, default_agg_function, field_agg_config):
+        """根据Y轴字段动态生成每个字段的聚合函数选择器"""
+        assignments = assignments or default_chart_assignments()
+        y_fields = assignments.get('y', [])
+        field_agg_config = field_agg_config or {}
+        default_agg_function = default_agg_function or 'sum'
+        
+        if not y_fields or len(y_fields) == 0:
+            return html.P("请先添加Y轴字段", className="text-muted small mb-2")
+        
+        # 为每个Y轴字段创建一个聚合函数选择器
+        field_selectors = []
+        for field in y_fields:
+            current_func = field_agg_config.get(field, default_agg_function)
+            field_selectors.append(
+                dbc.Row([
+                    dbc.Col([
+                        html.Label(f"{field}:", className="form-label small mb-1"),
+                        dbc.Select(
+                            id={"type": "field-agg-function", "field": field},
+                            options=[
+                                {"label": "求和 (SUM)", "value": "sum"},
+                                {"label": "平均值 (AVG)", "value": "avg"},
+                                {"label": "计数 (COUNT)", "value": "count"},
+                                {"label": "最大值 (MAX)", "value": "max"},
+                                {"label": "最小值 (MIN)", "value": "min"},
+                                {"label": "占比 (Percentage)", "value": "percentage"},
+                            ],
+                            value=current_func,
+                            size="sm",
+                        ),
+                    ], width=12, className="mb-2"),
+                ], className="mb-2")
+            )
+        
+        return html.Div(field_selectors)
+
+    @app.callback(
+        Output("field-agg-functions-config", "data", allow_duplicate=True),
+        [Input({"type": "field-agg-function", "field": ALL}, "value")],
+        [State({"type": "field-agg-function", "field": ALL}, "id"),
+         State("field-agg-functions-config", "data")],
+        prevent_initial_call=True
+    )
+    def update_field_agg_functions_config(field_funcs, field_ids, current_config):
+        """更新字段聚合函数配置"""
+        current_config = current_config or {}
+        new_config = current_config.copy()
+        
+        for field_id, func_value in zip(field_ids, field_funcs):
+            if isinstance(field_id, dict) and 'field' in field_id:
+                field_name = field_id['field']
+                new_config[field_name] = func_value
+        
+        return new_config
+
+    @app.callback(
         Output("chart-preview", "children"),
         [Input("chart-datasource-select", "value"),
          Input("chart-type", "value"),
          Input("chart-field-assignments", "data"),
          Input("agg-function", "value"),
+         Input("field-agg-functions-config", "data"),
          Input("chart-title", "value"),
          Input("color-theme", "value"),
          Input("chart-options", "value"),
@@ -1118,7 +1255,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
          Input("custom-colors-config", "data")],
         prevent_initial_call=False
     )
-    def update_chart_preview(datasource_id, chart_type, assignments, agg_function, title, color_theme, options, table_orientation, custom_colors):
+    def update_chart_preview(datasource_id, chart_type, assignments, agg_function, field_agg_functions, title, color_theme, options, table_orientation, custom_colors):
         """根据当前配置生成预览图表"""
         try:
             if not datasource_id:
@@ -1203,6 +1340,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     "show_labels": "show-labels" in options,
                     "show_legend": "show-legend" in options,
                     "agg_function": agg_function or "sum",
+                    "agg_functions": field_agg_functions or {},  # 各字段的聚合函数配置
                 }
                 fig = chart_engine.create_chart(df, chart_config)
                 return dcc.Graph(figure=fig, id="preview-chart")
@@ -1219,6 +1357,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
          State("chart-type", "value"),
          State("chart-field-assignments", "data"),
          State("agg-function", "value"),
+         State("field-agg-functions-config", "data"),
          State("chart-title", "value"),
          State("color-theme", "value"),
          State("chart-options", "value"),
@@ -1226,7 +1365,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
          State("editing-chart-id", "data")],
         prevent_initial_call=True
     )
-    def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors, editing_id):
+    def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, field_agg_functions, title, color_theme, options, custom_colors, editing_id):
         """保存图表配置"""
         if not datasource_id:
             return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2"), dash.no_update, dash.no_update
@@ -1258,6 +1397,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 "show_labels": "show-labels" in options,
                 "show_legend": "show-legend" in options,
                 "agg_function": agg_function or "sum",
+                "agg_functions": field_agg_functions or {},  # 各字段的聚合函数配置
             }
             
             if chart_type == 'table':
@@ -1267,21 +1407,65 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             
             chart_config['name'] = title or "未命名图表"
             
-            if 'id' in chart_config:
-                del chart_config['id']
+            # 如果正在编辑已有图表，保留图表ID以便更新
+            if editing_id:
+                chart_config['id'] = editing_id
             
             config_manager.save_chart(chart_config)
             
+            # 重新加载图表列表
             charts = config_manager.load_charts()
-            if charts:
-                chart_config = charts[-1]
-            
             charts_list = _generate_chart_cards(charts)
-            new_editing_id = None
             
-            return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2"), charts_list, new_editing_id
+            # 如果正在编辑，重新加载更新后的图表配置
+            if editing_id:
+                updated_config = config_manager.get_chart(editing_id)
+                if updated_config:
+                    chart_config = updated_config
+            
+            # 保存成功后，保持当前编辑状态（用户可以继续编辑或点击"新增"创建新图表）
+            return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2"), charts_list, editing_id
         except Exception as e:
             return dash.no_update, dbc.Alert(f"保存图表失败：{str(e)}", color="danger", className="m-2"), dash.no_update, dash.no_update
+
+    @app.callback(
+        [Output("editing-chart-id", "data", allow_duplicate=True),
+         Output("chart-datasource-select", "value", allow_duplicate=True),
+         Output("chart-type", "value", allow_duplicate=True),
+         Output("chart-field-assignments", "data", allow_duplicate=True),
+         Output("agg-function", "value", allow_duplicate=True),
+         Output("field-agg-functions-config", "data", allow_duplicate=True),
+         Output("chart-title", "value", allow_duplicate=True),
+         Output("color-theme", "value", allow_duplicate=True),
+         Output("chart-options", "value", allow_duplicate=True),
+         Output("custom-colors-config", "data", allow_duplicate=True),
+         Output("table-orientation", "value", allow_duplicate=True),
+         Output("chart-save-status", "children", allow_duplicate=True)],
+        Input("btn-new-chart", "n_clicks"),
+        prevent_initial_call=True
+    )
+    def create_new_chart(new_clicks):
+        """创建新图表 - 清空所有配置"""
+        if not new_clicks:
+            return [dash.no_update] * 12
+        
+        # 重置为默认值
+        assignments = default_chart_assignments()
+        
+        return (
+            None,  # editing-chart-id: 清空编辑状态
+            None,  # chart-datasource-select: 清空数据源选择
+            "line",  # chart-type: 默认折线图
+            assignments,  # chart-field-assignments: 重置字段配置
+            "sum",  # agg-function: 默认求和
+            {},  # field-agg-functions-config: 清空字段聚合函数配置
+            "",  # chart-title: 清空标题
+            "default",  # color-theme: 默认主题
+            ["show-legend"],  # chart-options: 默认只显示图例
+            {},  # custom-colors-config: 清空自定义颜色
+            "horizontal",  # table-orientation: 默认横向
+            html.P("已创建新图表，请开始配置", className="text-muted text-center py-2")  # 提示信息
+        )
 
     @app.callback(
         Output("chart-save-status", "children", allow_duplicate=True),
@@ -1289,10 +1473,11 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
          Input("export-png", "n_clicks"),
          Input("export-pdf", "n_clicks"),
          Input("export-html", "n_clicks")],
-        [State("chart-datasource-select", "value"),
+        [         State("chart-datasource-select", "value"),
          State("chart-type", "value"),
          State("chart-field-assignments", "data"),
          State("agg-function", "value"),
+         State("field-agg-functions-config", "data"),
          State("chart-title", "value"),
          State("color-theme", "value"),
          State("chart-options", "value"),
@@ -1300,7 +1485,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         prevent_initial_call=True
     )
     def export_chart(png_clicks, png_dropdown, pdf_clicks, html_clicks, 
-                     datasource_id, chart_type, assignments, agg_function, title, color_theme, options, custom_colors):
+                     datasource_id, chart_type, assignments, agg_function, field_agg_functions, title, color_theme, options, custom_colors):
         """导出图表"""
         ctx = callback_context
         if not ctx.triggered or not datasource_id:
@@ -1332,6 +1517,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 "show_labels": "show-labels" in options,
                 "show_legend": "show-legend" in options,
                 "agg_function": agg_function or "sum",
+                "agg_functions": field_agg_functions or {},  # 各字段的聚合函数配置
             }
             if chart_type == 'table':
                 chart_config['limit'] = 100

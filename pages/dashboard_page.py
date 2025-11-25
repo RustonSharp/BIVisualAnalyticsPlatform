@@ -696,6 +696,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     "show_labels": chart_config.get('show_labels', False),
                     "show_legend": chart_config.get('show_legend', True),
                     "agg_function": chart_config.get('agg_function', 'sum'),
+                    "agg_functions": chart_config.get('agg_functions', {}),  # 支持各字段的聚合函数
+                    "custom_formula": chart_config.get('custom_formula'),  # 支持自定义计算公式
                 }
                 
                 if chart_type == 'table':
@@ -1088,6 +1090,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         "show_labels": chart_config.get('show_labels', False),
                         "show_legend": chart_config.get('show_legend', True),
                         "agg_function": chart_config.get('agg_function', 'sum'),
+                        "agg_functions": chart_config.get('agg_functions', {}),  # 支持各字段的聚合函数
+                        "custom_formula": chart_config.get('custom_formula'),  # 支持自定义计算公式
                     }
                     
                     if chart_type == 'table':
