@@ -1,6 +1,7 @@
 """设置页面模块"""
 import dash_bootstrap_components as dbc
-from dash import html
+from dash import html, dcc, Input, Output, State, callback_context
+import dash
 
 
 def create_settings_page():
@@ -43,7 +44,10 @@ def create_settings_page():
                                                 value="default",
                                                 className="mb-3",
                                             ),
-                                            dbc.Button("保存设置", color="primary"),
+                                            dbc.Button("保存设置", id="btn-save-settings", color="primary", className="mb-3"),
+                                            html.Div(id="settings-save-status", children=[]),
+                                            dcc.Store(id="settings-save-status-message", data=None),  # 存储保存状态消息和时间戳
+                                            dcc.Interval(id="settings-save-status-interval", interval=100, disabled=True),  # 用于定时清除消息
                                         ]
                                     ),
                                 ],
@@ -71,4 +75,82 @@ def create_settings_page():
         ],
         fluid=True,
     )
+
+
+def register_settings_callbacks(app):
+    """注册设置页面的回调函数"""
+    
+    @app.callback(
+        Output("global-refresh-interval-setting", "data", allow_duplicate=True),
+        Input("refresh-interval", "value"),
+        prevent_initial_call='initial_duplicate'
+    )
+    def update_refresh_interval_setting(refresh_interval_value):
+        """更新全局刷新间隔设置（自动保存）"""
+        if refresh_interval_value:
+            return refresh_interval_value
+        return dash.no_update
+    
+    @app.callback(
+        [Output("global-refresh-interval-setting", "data", allow_duplicate=True),
+         Output("settings-save-status", "children"),
+         Output("settings-save-status-message", "data"),
+         Output("settings-save-status-interval", "disabled")],
+        Input("btn-save-settings", "n_clicks"),
+        [State("refresh-interval", "value"),
+         State("default-theme", "value")],
+        prevent_initial_call=True
+    )
+    def save_settings(save_clicks, refresh_interval_value, default_theme_value):
+        """保存设置"""
+        import time
+        
+        if not save_clicks:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
+        # 保存刷新间隔到全局Store
+        refresh_value = refresh_interval_value if refresh_interval_value else "off"
+        
+        # 显示保存成功消息
+        success_message = dbc.Alert(
+            [
+                html.I(className="fas fa-check-circle me-2"),
+                "设置已保存成功！",
+            ],
+            color="success",
+            className="mt-2"
+        )
+        
+        # 保存状态消息数据（包含时间戳）
+        status_data = {
+            "message": "设置已保存成功！",
+            "timestamp": time.time()
+        }
+        
+        # 返回更新的刷新间隔设置、成功消息、状态数据和启用Interval
+        return refresh_value, success_message, status_data, False
+    
+    @app.callback(
+        [Output("settings-save-status", "children", allow_duplicate=True),
+         Output("settings-save-status-interval", "disabled", allow_duplicate=True)],
+        Input("settings-save-status-interval", "n_intervals"),
+        State("settings-save-status-message", "data"),
+        prevent_initial_call=True
+    )
+    def clear_save_status(n_intervals, status_data):
+        """3秒后自动清除保存状态消息"""
+        import time
+        
+        if not status_data or not status_data.get('timestamp'):
+            return [], True  # 没有消息，禁用 Interval
+        
+        current_time = time.time()
+        elapsed = current_time - status_data.get('timestamp', 0)
+        
+        # 如果超过3秒，清除消息并禁用 Interval
+        if elapsed >= 3.0:
+            return [], True
+        
+        # 否则保持消息不变，继续运行 Interval
+        return dash.no_update, False
 

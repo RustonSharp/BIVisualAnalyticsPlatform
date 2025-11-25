@@ -123,13 +123,19 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
                 start_ts = pd.Timestamp(start_date)
                 end_ts = pd.Timestamp(end_date)
                 # 检查是否为NaT
-                if pd.isna(start_ts) or pd.isna(end_ts):
+                if pd.isna(start_ts) or pd.isna(end_ts):  # type: ignore[arg-type]
                     return df, "日期格式错误: 无法解析日期"
                 start = cast(pd.Timestamp, start_ts)
                 end = cast(pd.Timestamp, end_ts)
                 # 确保end包含整天
                 if end.hour == 0 and end.minute == 0:
-                    end = cast(pd.Timestamp, end + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+                    # 类型检查：确保Timedelta不是NaT
+                    delta1 = pd.Timedelta(days=1)
+                    delta2 = pd.Timedelta(seconds=1)
+                    if pd.isna(delta1) or pd.isna(delta2):  # type: ignore[arg-type]
+                        return df, "日期格式错误: 无法创建时间差"
+                    delta = delta1 - delta2  # type: ignore[operator]
+                    end = cast(pd.Timestamp, end + delta)  # type: ignore[operator]
             except (ValueError, TypeError) as e:
                 return df, f"日期格式错误: {str(e)}"
         else:
@@ -178,8 +184,14 @@ def create_dashboard_page():
             dcc.Store(id="dashboard-refresh-trigger", data=0),
             dcc.Store(id="export-status-message", data=None),  # 存储导出状态消息和时间戳
             dcc.Interval(id="export-status-interval", interval=100, disabled=True),  # 用于定时清除消息
+            dcc.Store(id="auto-refresh-interval-setting", data="off"),  # 存储自动刷新间隔设置（分钟）
+            dcc.Interval(id="dashboard-auto-refresh-interval", interval=5*60*1000, disabled=True),  # 自动刷新定时器（默认5分钟，初始禁用）
             dcc.Store(id="chart-filter-state", data=None),  # 存储图表联动筛选条件 {source_chart_id, field, value}
-            dcc.Store(id="chart-data-cache", data={}),  # 缓存每个图表的原始数据，用于筛选
+            dcc.Store(id="chart-data-cache", data={}),  # 缓存每个图表的原始数据，用于筛选和下钻
+            dcc.Store(id="drill-down-data", data=None),  # 存储下钻数据 {chart_id, filter_conditions, detail_data}
+            dcc.Store(id="chart-interaction-mode", data="filter"),  # 图表交互模式："filter"（筛选）或"drill-down"（下钻）
+            dcc.Store(id="drill-down-trigger", data=None),  # 触发下钻的触发器 {chart_id, click_data}
+            dcc.Interval(id="drill-down-check-interval", interval=100, disabled=False),  # 用于检查下钻触发的定时器
             
             # 顶部工具栏
             dbc.Row(
@@ -208,6 +220,57 @@ def create_dashboard_page():
                                               id="btn-edit-dashboard", color="secondary", size="sm"),
                                     dbc.Button([html.I(className="fas fa-trash me-1"), "删除"], 
                                               id="btn-delete-dashboard", color="danger", size="sm"),
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
+                                              id="btn-add-chart-to-dashboard", color="success", size="sm"),
+                                ],
+                            ),
+                        ],
+                        width=4,
+                    ),
+                ],
+                className="mb-3"
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dbc.ButtonGroup(
+                                [
+                                    dbc.Button(
+                                        [html.I(className="fas fa-filter me-1"), "筛选模式"],
+                                        id="btn-interaction-mode-filter",
+                                        color="primary",
+                                        size="sm",
+                                        outline=False,
+                                        className="interaction-mode-btn"
+                                    ),
+                                    dbc.Button(
+                                        [html.I(className="fas fa-search me-1"), "下钻模式"],
+                                        id="btn-interaction-mode-drill-down",
+                                        color="secondary",
+                                        size="sm",
+                                        outline=True,
+                                        className="interaction-mode-btn"
+                                    ),
+                                ],
+                            ),
+                            html.Small(
+                                id="interaction-mode-hint",
+                                children="当前模式：筛选模式 - 左键点击图表数据点可筛选其他图表",
+                                className="text-muted d-block mt-2"
+                            ),
+                        ],
+                        width=12,
+                    ),
+                ],
+                className="mb-2"
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        [
+                            dbc.ButtonGroup(
+                                [
                                     dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
                                               id="btn-add-chart-to-dashboard", color="success", size="sm"),
                                     dbc.Button([html.I(className="fas fa-filter me-1"), "清除筛选"], 
@@ -362,6 +425,40 @@ def create_dashboard_page():
                 id="modal-share-dashboard",
                 is_open=False,
             ),
+            
+            # 数据下钻模态框
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(
+                        [
+                            html.Span("数据下钻详情", className="me-auto"),
+                            dbc.Button(
+                                [html.I(className="fas fa-arrow-left me-1"), "返回"],
+                                id="btn-drill-down-back",
+                                color="link",
+                                size="sm",
+                                className="p-0"
+                            ),
+                        ],
+                        className="d-flex justify-content-between align-items-center",
+                    ),
+                    dbc.ModalBody(
+                        [
+                            html.Div(id="drill-down-content", children=[
+                                html.P("正在加载详细数据...", className="text-muted text-center py-5"),
+                            ]),
+                        ]
+                    ),
+                    dbc.ModalFooter(
+                        [
+                            dbc.Button("关闭", id="btn-close-drill-down-modal", color="secondary"),
+                        ]
+                    ),
+                ],
+                id="modal-drill-down",
+                is_open=False,
+                size="xl",
+            ),
         ],
         fluid=True,
     )
@@ -438,24 +535,26 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         return None, None, "我的仪表盘"
 
     @app.callback(
-        Output("dashboard-charts-container", "children"),
+        [Output("dashboard-charts-container", "children"),
+         Output("chart-data-cache", "data", allow_duplicate=True)],
         [Input("current-dashboard-config", "data"),
          Input("time-filter", "value"),
          Input("start-date", "date"),
          Input("end-date", "date"),
          Input("export-status-message", "data"),
-         Input("chart-filter-state", "data")],
+         Input("chart-filter-state", "data"),
+         Input("dashboard-refresh-trigger", "data")],
         [State("chart-data-cache", "data")],
-        prevent_initial_call=False
+        prevent_initial_call='initial_duplicate'
     )
-    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status, filter_state, data_cache):
+    def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status, filter_state, refresh_trigger, data_cache):
         """渲染仪表盘中的图表"""
         if not dashboard_config:
-            return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5")
+            return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"), dash.no_update
         
         chart_ids = dashboard_config.get('chart_ids', [])
         if not chart_ids:
-            return html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
+            return html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5"), dash.no_update
         
         charts = config_manager.load_charts()
         chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
@@ -564,6 +663,15 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 
                 adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
                 df_raw = adapter.fetch_data(limit=1000)
+                
+                # 缓存原始数据用于下钻（在应用筛选前的数据）
+                if not data_cache:
+                    data_cache = {}
+                try:
+                    # 将DataFrame转换为JSON可序列化的格式
+                    data_cache[chart_id] = df_raw.to_dict('records') if isinstance(df_raw, pd.DataFrame) else []
+                except:
+                    pass
                 
                 # 确保 df 是 DataFrame 类型
                 if not isinstance(df_raw, pd.DataFrame):
@@ -752,7 +860,16 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         dbc.CardBody(
                             [
                                 html.Div([
-                                    dcc.Graph(figure=fig, id={"type": "dashboard-chart", "chart_id": chart_id}),
+                                    dcc.Graph(
+                                        figure=fig, 
+                                        id={"type": "dashboard-chart", "chart_id": chart_id},
+                                        config={
+                                            'displayModeBar': True, 
+                                            'doubleClick': 'reset',
+                                            'modeBarButtonsToRemove': ['pan2d', 'select2d', 'lasso2d'],
+                                            'displaylogo': False
+                                        }
+                                    ),
                                     html.Div(
                                         dbc.Alert(
                                             [
@@ -762,6 +879,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                                             color="info",
                                             className="mt-2 mb-0 small"
                                         ) if filter_warning else None
+                                    ),
+                                    html.Small(
+                                        "",  # 提示文字已移动到模式切换按钮下方
+                                        className="text-muted d-block mt-2"
                                     ),
                                 ]),
                             ]
@@ -828,18 +949,18 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     ],
                     color="warning",
                     className="m-4"
-                )
+                ), data_cache or {}
             else:
                 result = html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
                 # 如果有导出状态消息，显示在顶部
                 if export_status and export_status.get('message'):
-                    return [export_status['message'], result]
-                return result
+                    return [export_status['message'], result], data_cache
+                return result, data_cache
         
         # 如果有导出状态消息，显示在图表前面
         if export_status and export_status.get('message'):
-            return [export_status['message']] + rows
-        return rows
+            return [export_status['message']] + rows, data_cache
+        return rows, data_cache
 
     @app.callback(
         [Output("modal-dashboard", "is_open"),
@@ -1232,111 +1353,209 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         return dash.no_update, False
 
     @app.callback(
+        [Output("chart-interaction-mode", "data"),
+         Output("btn-interaction-mode-filter", "color"),
+         Output("btn-interaction-mode-filter", "outline"),
+         Output("btn-interaction-mode-drill-down", "color"),
+         Output("btn-interaction-mode-drill-down", "outline"),
+         Output("interaction-mode-hint", "children")],
+        [Input("btn-interaction-mode-filter", "n_clicks"),
+         Input("btn-interaction-mode-drill-down", "n_clicks")],
+        State("chart-interaction-mode", "data"),
+        prevent_initial_call=True
+    )
+    def switch_interaction_mode(filter_clicks, drill_down_clicks, current_mode):
+        """切换图表交互模式：筛选或下钻"""
+        ctx = callback_context
+        if not ctx.triggered:
+            mode = current_mode or "filter"
+        else:
+            trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+            if trigger_id == "btn-interaction-mode-filter":
+                mode = "filter"
+            elif trigger_id == "btn-interaction-mode-drill-down":
+                mode = "drill-down"
+            else:
+                mode = current_mode or "filter"
+        
+        # 更新按钮状态和提示文字
+        if mode == "filter":
+            return (
+                "filter",
+                "primary",
+                False,
+                "secondary",
+                True,
+                "当前模式：筛选模式 - 左键点击图表数据点可筛选其他图表"
+            )
+        else:
+            return (
+                "drill-down",
+                "secondary",
+                True,
+                "primary",
+                False,
+                "当前模式：下钻模式 - 左键点击图表数据点可查看详细数据"
+            )
+    
+    @app.callback(
         [Output("chart-filter-state", "data", allow_duplicate=True),
-         Output("chart-data-cache", "data", allow_duplicate=True)],
+         Output("chart-data-cache", "data", allow_duplicate=True),
+         Output("drill-down-trigger", "data", allow_duplicate=True)],
         [Input({"type": "dashboard-chart", "chart_id": ALL}, "clickData"),
          Input({"type": "dashboard-chart", "chart_id": ALL}, "selectedData")],
         [State("current-dashboard-config", "data"),
          State("chart-filter-state", "data"),
-         State("chart-data-cache", "data")],
+         State("chart-data-cache", "data"),
+         State("chart-interaction-mode", "data")],
         prevent_initial_call=True
     )
-    def handle_chart_click(click_data_list, selected_data_list, dashboard_config, current_filter, data_cache):
-        """处理图表点击事件，设置筛选条件"""
+    def handle_chart_click(click_data_list, selected_data_list, dashboard_config, current_filter, data_cache, interaction_mode):
+        """处理图表点击事件，根据模式执行筛选或下钻"""
         ctx = callback_context
         if not ctx.triggered or not dashboard_config:
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update
+        
+        # 获取当前交互模式，默认为筛选模式
+        mode = interaction_mode or "filter"
         
         # 找到被点击的图表
         triggered_id = ctx.triggered[0]["prop_id"]
         if not triggered_id or triggered_id == ".":
-            return dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update
         
         try:
             # 解析图表ID
             chart_id_str = triggered_id.split(".")[0]
-            chart_id_dict = json.loads(chart_id_str)
+            chart_id_dict = json.loads(chart_id_str)  # type: ignore[attr-defined]
             source_chart_id = chart_id_dict.get("chart_id")
             
             if not source_chart_id:
-                return dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update
             
             # 获取被点击图表的索引
             chart_ids = dashboard_config.get('chart_ids', [])
             if source_chart_id not in chart_ids:
-                return dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update
             
             chart_index = chart_ids.index(source_chart_id)
-            click_data = click_data_list[chart_index] if chart_index < len(click_data_list) else None
             
-            # 如果点击的是已筛选的源图表，清除筛选（再次点击源图表清除筛选）
-            if current_filter and current_filter.get('source_chart_id') == source_chart_id and click_data:
-                return None, dash.no_update
+            # 安全地获取点击数据
+            if not click_data_list or chart_index >= len(click_data_list):
+                return dash.no_update, dash.no_update, dash.no_update
+            
+            click_data = click_data_list[chart_index]
             
             if not click_data:
-                return dash.no_update, dash.no_update
+                return dash.no_update, dash.no_update, dash.no_update
             
-            # 从点击数据中提取筛选字段和值
-            filter_field = None
-            filter_value = None
-            
-            # Plotly 点击数据结构：{'points': [{'x': value, 'y': value, 'customdata': ..., ...}]}
-            points = click_data.get('points', [])
-            if points:
-                point = points[0]
+            # 根据模式执行不同的操作
+            if mode == "drill-down":
+                # 下钻模式：触发下钻
+                # 提取可序列化的点击数据，避免循环引用
+                serializable_click_data = None
+                if click_data and isinstance(click_data, dict):
+                    points = click_data.get('points', [])
+                    if points and isinstance(points, list) and len(points) > 0:
+                        point = points[0]
+                        serializable_point = {}
+                        # 只提取简单的可序列化字段
+                        for key in ['x', 'y', 'pointIndex', 'curveNumber', 'label', 'customdata', 'text', 'z']:
+                            if key in point and point[key] is not None:
+                                try:
+                                    # 尝试序列化以验证是否可序列化
+                                    json.dumps(point[key])
+                                    serializable_point[key] = point[key]
+                                except (TypeError, ValueError):
+                                    # 如果无法序列化，跳过这个字段
+                                    continue
+                        if serializable_point:
+                            serializable_click_data = {"points": [serializable_point]}
                 
-                # 获取图表配置以确定字段
-                charts = config_manager.load_charts()
-                chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
-                chart_config = chart_map.get(source_chart_id)
+                if not serializable_click_data:
+                    # 如果无法提取数据，返回错误提示
+                    return dash.no_update, dash.no_update, dash.no_update
                 
-                if chart_config:
-                    chart_type = chart_config.get('type', 'line')
-                    x_field = chart_config.get('x')
-                    y_field = chart_config.get('y')
-                    group_field = chart_config.get('group')
+                return dash.no_update, dash.no_update, {
+                    "chart_id": source_chart_id,
+                    "click_data": serializable_click_data,
+                    "timestamp": datetime.now().timestamp()
+                }
+            else:
+                # 筛选模式：执行筛选逻辑
+                # 如果点击的是已筛选的源图表，清除筛选（再次点击源图表清除筛选）
+                if current_filter and current_filter.get('source_chart_id') == source_chart_id:
+                    return None, dash.no_update, dash.no_update
+                
+                # 从点击数据中提取筛选字段和值
+                filter_field = None
+                filter_value = None
+                
+                # Plotly 点击数据结构：{'points': [{'x': value, 'y': value, 'customdata': ..., ...}]}
+                points = click_data.get('points', [])
+                if points:
+                    point = points[0]
                     
-                    # 根据图表类型和点击位置确定筛选字段
-                    if chart_type in ['bar', 'line', 'combo']:
-                        # 对于柱状图和折线图，通常点击 X 轴值进行筛选
-                        if 'x' in point and point['x'] is not None:
-                            filter_field = x_field
-                            filter_value = point['x']
-                        elif 'label' in point and point['label'] is not None:
-                            filter_field = x_field
-                            filter_value = point['label']
-                        elif 'customdata' in point and point['customdata'] is not None:
-                            # 尝试从 customdata 中获取值
-                            filter_field = x_field
-                            filter_value = point['customdata']
-                    elif chart_type == 'pie':
-                        # 对于饼图，点击的是分类值
-                        if 'label' in point and point['label'] is not None:
-                            filter_field = group_field or x_field
-                            filter_value = point['label']
-                        elif 'x' in point and point['x'] is not None:
-                            filter_field = group_field or x_field
-                            filter_value = point['x']
-                        elif 'customdata' in point and point['customdata'] is not None:
-                            filter_field = group_field or x_field
-                            filter_value = point['customdata']
+                    # 获取图表配置以确定字段
+                    charts = config_manager.load_charts()
+                    chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+                    chart_config = chart_map.get(source_chart_id)
                     
-                    # 如果找到了筛选字段和值，设置筛选条件
-                    if filter_field and filter_value is not None:
-                        filter_state = {
-                            "source_chart_id": source_chart_id,
-                            "field": filter_field,
-                            "value": filter_value
-                        }
-                        return filter_state, dash.no_update
-            
-            return dash.no_update, dash.no_update
-            
+                    if chart_config:
+                        chart_type = chart_config.get('type', 'line')
+                        x_field = chart_config.get('x')
+                        y_field = chart_config.get('y')
+                        group_field = chart_config.get('group')
+                        
+                        # 根据图表类型和点击位置确定筛选字段
+                        if chart_type in ['bar', 'line', 'combo']:
+                            # 对于柱状图和折线图，通常点击 X 轴值进行筛选
+                            if 'x' in point and point['x'] is not None:
+                                filter_field = x_field
+                                filter_value = point['x']
+                            elif 'label' in point and point['label'] is not None:
+                                filter_field = x_field
+                                filter_value = point['label']
+                            elif 'customdata' in point and point['customdata'] is not None:
+                                # 尝试从 customdata 中获取值
+                                filter_field = x_field
+                                filter_value = point['customdata']
+                        elif chart_type == 'pie':
+                            # 对于饼图，点击的是分类值
+                            if 'label' in point and point['label'] is not None:
+                                filter_field = group_field or x_field
+                                filter_value = point['label']
+                            elif 'x' in point and point['x'] is not None:
+                                filter_field = group_field or x_field
+                                filter_value = point['x']
+                            elif 'customdata' in point and point['customdata'] is not None:
+                                filter_field = group_field or x_field
+                                filter_value = point['customdata']
+                        
+                        # 如果找到了筛选字段和值，设置筛选条件
+                        if filter_field and filter_value is not None:
+                            filter_state = {
+                                "source_chart_id": source_chart_id,
+                                "field": filter_field,
+                                "value": filter_value
+                            }
+                            return filter_state, dash.no_update, dash.no_update
+                
+                return dash.no_update, dash.no_update, dash.no_update
+                
         except Exception as e:
             import traceback
-            print(f"处理图表点击事件时出错: {str(e)}")
-            traceback.print_exc()
-            return dash.no_update, dash.no_update
+            error_msg = str(e)
+            error_trace = traceback.format_exc()
+            print(f"处理图表点击事件时出错: {error_msg}")
+            print(error_trace)
+            # 确保异常时也返回正确数量的值
+            try:
+                return dash.no_update, dash.no_update, dash.no_update
+            except Exception as ret_error:
+                print(f"返回默认值时出错: {str(ret_error)}")
+                # 最后的兜底返回
+                return None, {}, None
 
     @app.callback(
         [Output("chart-filter-state", "data", allow_duplicate=True),
@@ -1413,7 +1632,205 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             return {"display": "inline-block"}, status_badge
         
         return {"display": "none"}, html.Div()
-
+    
+    @app.callback(
+        [Output("modal-drill-down", "is_open"),
+         Output("drill-down-data", "data"),
+         Output("drill-down-content", "children")],
+        [Input("drill-down-trigger", "data"),
+         Input("btn-close-drill-down-modal", "n_clicks"),
+         Input("btn-drill-down-back", "n_clicks")],
+        [State("modal-drill-down", "is_open"),
+         State("current-dashboard-config", "data"),
+         State("chart-data-cache", "data"),
+         State("drill-down-data", "data")],
+        prevent_initial_call=True
+    )
+    def handle_drill_down(drill_down_trigger, close_clicks, back_clicks, is_open, dashboard_config, data_cache, drill_down_data):
+        """处理图表下钻事件，显示数据下钻详情"""
+        ctx = callback_context
+        if not ctx.triggered:
+            return False, None, html.P("无数据", className="text-muted text-center py-5")
+        
+        triggered_id = ctx.triggered[0]["prop_id"]
+        
+        # 如果点击关闭或返回按钮
+        if "btn-close-drill-down-modal" in triggered_id or "btn-drill-down-back" in triggered_id:
+            return False, None, html.P("无数据", className="text-muted text-center py-5")
+        
+        # 如果是下钻触发
+        if "drill-down-trigger" in triggered_id and drill_down_trigger:
+            if not dashboard_config:
+                return False, None, html.P("无数据", className="text-muted text-center py-5")
+            
+            try:
+                chart_id = drill_down_trigger.get("chart_id")
+                click_data = drill_down_trigger.get("click_data")
+                
+                if not chart_id or not click_data:
+                    return False, None, html.P("无数据", className="text-muted text-center py-5")
+                
+                # 验证图表ID是否在仪表盘中
+                chart_ids = dashboard_config.get('chart_ids', [])
+                if chart_id not in chart_ids:
+                    return False, None, html.P("无数据", className="text-muted text-center py-5")
+                
+                # 执行下钻逻辑
+                try:
+                    # 获取图表配置
+                    charts = config_manager.load_charts()
+                    chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
+                    chart_config = chart_map.get(chart_id)
+                    
+                    if not chart_config:
+                        return False, None, html.P("图表配置不存在", className="text-muted text-center py-5")
+                    
+                    # 获取原始数据
+                    original_data = None
+                    if data_cache and chart_id in data_cache:
+                        try:
+                            original_data = pd.DataFrame(data_cache[chart_id])
+                        except:
+                            pass
+                    
+                    # 如果缓存中没有，尝试重新加载
+                    if original_data is None or original_data.empty:
+                        try:
+                            datasource_id = chart_config.get('datasource_id')
+                            if datasource_id:
+                                ds_config = config_manager.get_datasource(datasource_id)
+                                if ds_config:
+                                    adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
+                                    original_data = adapter.fetch_data(limit=1000)
+                        except Exception as e:
+                            print(f"加载原始数据失败: {str(e)}")
+                    
+                    if original_data is None or original_data.empty:
+                        return True, None, dbc.Alert("无法加载原始数据", color="warning")
+                    
+                    # 从点击数据中提取筛选条件
+                    points = click_data.get('points', [])
+                    if not points:
+                        return False, None, html.P("无数据点", className="text-muted text-center py-5")
+                    
+                    point = points[0]
+                    chart_type = chart_config.get('type', 'line')
+                    x_field = chart_config.get('x')
+                    y_field = chart_config.get('y')
+                    group_field = chart_config.get('group')
+                    
+                    # 确定筛选字段和值
+                    filter_conditions = {}
+                    drill_down_title = "数据详情"
+                    
+                    if chart_type in ['bar', 'line', 'combo']:
+                        # 对于柱状图和折线图，下钻显示该X值对应的所有详细数据
+                        if 'x' in point and point['x'] is not None:
+                            filter_value = point['x']
+                            if x_field and x_field in original_data.columns:
+                                filter_conditions[x_field] = filter_value
+                                drill_down_title = f"{x_field} = {filter_value} 的详细数据"
+                    elif chart_type == 'pie':
+                        # 对于饼图，下钻显示该分类的所有详细数据
+                        if 'label' in point and point['label'] is not None:
+                            filter_value = point['label']
+                            filter_field = group_field or x_field
+                            if filter_field and filter_field in original_data.columns:
+                                filter_conditions[filter_field] = filter_value
+                                drill_down_title = f"{filter_field} = {filter_value} 的详细数据"
+                    
+                    # 应用筛选条件
+                    filtered_data: pd.DataFrame = original_data.copy()
+                    for field, value in filter_conditions.items():
+                        try:
+                            if pd.api.types.is_numeric_dtype(filtered_data[field]):
+                                filtered_result = filtered_data[filtered_data[field] == value]
+                                filtered_data = cast(pd.DataFrame, filtered_result)
+                            else:
+                                filtered_result = filtered_data[filtered_data[field].astype(str) == str(value)]
+                                filtered_data = cast(pd.DataFrame, filtered_result)
+                        except:
+                            pass
+                    
+                    # 类型检查：确保 filtered_data 是 DataFrame
+                    if not isinstance(filtered_data, pd.DataFrame) or len(filtered_data) == 0:
+                        return True, None, dbc.Alert(f"未找到匹配的数据（筛选条件: {filter_conditions}）", color="warning")
+                    
+                    # 创建数据表格
+                    # 类型检查：dbc.Table.from_dataframe 方法确实存在
+                    filtered_head = filtered_data.head(100)  # type: ignore[attr-defined]
+                    table = dbc.Table.from_dataframe(  # type: ignore[attr-defined]
+                        filtered_head,
+                        striped=True,
+                        bordered=True,
+                        hover=True,
+                        responsive=True,
+                        className="table-sm"
+                    )
+                    
+                    # 构建下钻内容
+                    drill_content = [
+                        html.H5(drill_down_title, className="mb-3"),
+                        html.P(f"共找到 {len(filtered_data)} 条记录（最多显示100条）", className="text-muted mb-3"),
+                        table,
+                    ]
+                    
+                    # 保存下钻数据状态
+                    drill_down_state = {
+                        "chart_id": chart_id,
+                        "filter_conditions": filter_conditions,
+                        "total_rows": len(filtered_data)
+                    }
+                    
+                    return True, drill_down_state, drill_content
+                    
+                except Exception as e:
+                    import traceback
+                    error_msg = str(e)
+                    error_trace = traceback.format_exc()
+                    print(f"处理数据下钻时发生错误: {error_msg}")
+                    print(error_trace)
+                    return True, None, dbc.Alert(f"处理数据下钻时发生错误: {error_msg}", color="danger")
+                    
+            except Exception as e:
+                import traceback
+                error_msg = str(e)
+                error_trace = traceback.format_exc()
+                print(f"处理右键点击下钻时发生错误: {error_msg}")
+                print(error_trace)
+                return True, None, dbc.Alert(f"处理数据下钻时发生错误: {error_msg}", color="danger")
+        
+        return dash.no_update, dash.no_update, dash.no_update
+    
+    @app.callback(
+        [Output("dashboard-auto-refresh-interval", "disabled"),
+         Output("dashboard-auto-refresh-interval", "interval")],
+        Input("global-refresh-interval-setting", "data"),
+        prevent_initial_call=False
+    )
+    def update_auto_refresh_setting(interval_setting):
+        """根据设置更新自动刷新间隔"""
+        if not interval_setting or interval_setting == "off":
+            return True, 5*60*1000  # 禁用，但保持默认间隔
+        try:
+            interval_minutes = int(interval_setting)
+            interval_ms = interval_minutes * 60 * 1000
+            return False, interval_ms  # 启用定时器
+        except:
+            return True, 5*60*1000  # 禁用，保持默认间隔
+    
+    @app.callback(
+        Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
+        Input("dashboard-auto-refresh-interval", "n_intervals"),
+        State("dashboard-refresh-trigger", "data"),
+        prevent_initial_call=True
+    )
+    def trigger_dashboard_refresh(n_intervals, current_trigger):
+        """定时触发仪表盘刷新"""
+        if n_intervals:
+            return (current_trigger or 0) + 1
+        return dash.no_update
+    
     @app.callback(
         [Output("modal-share-dashboard", "is_open"),
          Output("share-link-input", "value")],
@@ -1468,6 +1885,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             )
         return dash.no_update
 
+    # 移除：不再需要Ctrl+左键监听，改用模式切换按钮控制
+    # 下钻现在通过模式切换按钮和左键点击触发，不再需要客户端回调拦截
+    
+    
     # 客户端回调：使用JavaScript复制到剪贴板
     app.clientside_callback(
         """

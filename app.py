@@ -63,6 +63,7 @@ app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="datasource-save-success", data=False),
+        dcc.Store(id="global-refresh-interval-setting", data="off"),  # 全局刷新间隔设置
         create_sidebar(),
         html.Div(id="page-content", style=CONTENT_STYLE),
     ]
@@ -100,6 +101,10 @@ register_chart_designer_callbacks(app, config_manager, data_source_manager, char
 
 # 注册仪表盘页面回调
 register_dashboard_callbacks(app, config_manager, data_source_manager, chart_engine, EXPORT_DIR)
+
+# 注册设置页面回调
+from pages.settings_page import register_settings_callbacks
+register_settings_callbacks(app)
 
 # ==========================================
 # 启动应用
