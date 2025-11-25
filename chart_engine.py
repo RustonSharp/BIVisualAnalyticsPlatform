@@ -613,12 +613,24 @@ class ChartEngine:
         return fig
     
     def _create_combo_chart(self, data: pd.DataFrame, config: Dict[str, Any]) -> go.Figure:
-        """创建组合图（折线+柱状）"""
+        """
+        创建组合图（折线+柱状）
+        
+        支持：
+        - 多个Y轴字段（第一个字段用柱状图，后续字段用折线图）
+        - 分组功能（group字段）
+        - 颜色主题和自定义颜色
+        - 数据标签
+        - 多个Y轴（左侧显示柱状图，右侧显示折线图）
+        """
         x = config.get('x')
         y = config.get('y', [])
+        group = config.get('group')
         title = config.get('title', '组合图')
         color_theme = config.get('color_theme', 'default')
+        show_labels = config.get('show_labels', False)
         show_legend = config.get('show_legend', True)
+        custom_colors = config.get('custom_colors', {})
         
         if not x or not y:
             raise ValueError("组合图需要指定 X 轴和至少一个 Y 轴字段")
@@ -626,39 +638,151 @@ class ChartEngine:
         if isinstance(y, str):
             y = [y]
         
+        # 获取颜色主题
+        theme_colors = self.COLOR_THEMES.get(color_theme, self.COLOR_THEMES['default'])
+        if not isinstance(theme_colors, list):
+            theme_colors = list(theme_colors) if hasattr(theme_colors, '__iter__') else [theme_colors]
+        theme_colors = [str(c) for c in theme_colors if c]
+        
         # 创建图表
         fig = go.Figure()
         
-        # 第一个 Y 轴用柱状图
-        if len(y) > 0:
-            fig.add_trace(go.Bar(
-                x=data[x],
-                y=data[y[0]],
-                name=y[0],
-                yaxis='y',
-                offsetgroup=1
-            ))
-        
-        # 第二个 Y 轴用折线图
-        if len(y) > 1:
-            fig.add_trace(go.Scatter(
-                x=data[x],
-                y=data[y[1]],
-                name=y[1],
-                mode='lines+markers',
-                yaxis='y2',
-                line=dict(color='red')
-            ))
+        # 处理分组
+        if group and group in data.columns:
+            # 有分组的情况
+            unique_groups = data[group].unique()
+            num_groups = len(unique_groups)
             
-            # 添加第二个 Y 轴
-            fig.update_layout(
-                yaxis2=dict(
-                    title=y[1],
-                    overlaying='y',
-                    side='right'
+            # 构建颜色映射
+            color_map = {}
+            used_colors = set()
+            color_index = 0
+            
+            for group_val in unique_groups:
+                group_val_str = str(group_val)
+                if group_val_str in custom_colors:
+                    color_map[group_val_str] = custom_colors[group_val_str]
+                    used_colors.add(custom_colors[group_val_str])
+                else:
+                    # 使用主题颜色
+                    while color_index < len(theme_colors) and theme_colors[color_index] in used_colors:
+                        color_index += 1
+                    if color_index < len(theme_colors):
+                        color_map[group_val_str] = theme_colors[color_index]
+                        used_colors.add(theme_colors[color_index])
+                        color_index += 1
+                    else:
+                        # 颜色用完了，循环使用
+                        color_index = 0
+                        color_map[group_val_str] = theme_colors[color_index % len(theme_colors)]
+                        color_index += 1
+            
+            # 第一个Y轴字段：柱状图（左侧Y轴）
+            if len(y) > 0:
+                for group_val in unique_groups:
+                    group_data = data[data[group] == group_val]
+                    color = color_map.get(str(group_val), theme_colors[0])
+                    
+                    fig.add_trace(go.Bar(
+                        x=group_data[x],
+                        y=group_data[y[0]],
+                        name=f"{y[0]} ({group_val})" if num_groups > 1 else y[0],
+                        yaxis='y',
+                        offsetgroup=1,
+                        marker_color=color,
+                        legendgroup=f"bar_{group_val}",
+                        text=group_data[y[0]].tolist() if show_labels else None,
+                        textposition='outside' if show_labels else None,
+                    ))
+            
+            # 后续Y轴字段：折线图（右侧Y轴，共享同一个Y轴）
+            yaxis2_title = None
+            if len(y) > 1:
+                # 如果有多个折线图字段，使用组合标题
+                if len(y) > 2:
+                    yaxis2_title = f"{', '.join(y[1:])}"  # 多个字段时显示所有字段名
+                else:
+                    yaxis2_title = y[1]
+            
+            for idx, y_field in enumerate(y[1:], start=1):
+                for group_val in unique_groups:
+                    group_data = data[data[group] == group_val]
+                    color = color_map.get(str(group_val), theme_colors[idx % len(theme_colors)])
+                    
+                    fig.add_trace(go.Scatter(
+                        x=group_data[x],
+                        y=group_data[y_field],
+                        name=f"{y_field} ({group_val})" if num_groups > 1 else y_field,
+                        mode='lines+markers',
+                        yaxis='y2',  # 所有折线图共享右侧Y轴
+                        line=dict(color=color, width=2),
+                        marker=dict(color=color, size=6),
+                        legendgroup=f"line_{y_field}_{group_val}",
+                        text=group_data[y_field].tolist() if show_labels else None,
+                        textposition='top center' if show_labels else None,
+                    ))
+            
+            # 添加第二个Y轴（如果有折线图）
+            if len(y) > 1:
+                fig.update_layout(
+                    yaxis2=dict(
+                        title=yaxis2_title or '',
+                        overlaying='y',
+                        side='right'
+                    )
                 )
-            )
+        else:
+            # 无分组的情况
+            # 第一个Y轴字段：柱状图（左侧Y轴）
+            if len(y) > 0:
+                bar_color = theme_colors[0] if theme_colors else '#1f77b4'
+                fig.add_trace(go.Bar(
+                    x=data[x],
+                    y=data[y[0]],
+                    name=y[0],
+                    yaxis='y',
+                    offsetgroup=1,
+                    marker_color=bar_color,
+                    text=data[y[0]].tolist() if show_labels else None,
+                    textposition='outside' if show_labels else None,
+                ))
+            
+            # 后续Y轴字段：折线图（右侧Y轴，共享同一个Y轴）
+            yaxis2_title = None
+            if len(y) > 1:
+                # 如果有多个折线图字段，使用第一个折线图字段的名称作为Y轴标题
+                # 或者使用组合标题
+                if len(y) > 2:
+                    yaxis2_title = f"{', '.join(y[1:])}"  # 多个字段时显示所有字段名
+                else:
+                    yaxis2_title = y[1]
+            
+            for idx, y_field in enumerate(y[1:], start=1):
+                line_color = theme_colors[idx % len(theme_colors)] if theme_colors else '#ff7f0e'
+                
+                fig.add_trace(go.Scatter(
+                    x=data[x],
+                    y=data[y_field],
+                    name=y_field,
+                    mode='lines+markers',
+                    yaxis='y2',  # 所有折线图共享右侧Y轴
+                    line=dict(color=line_color, width=2),
+                    marker=dict(color=line_color, size=6),
+                    text=data[y_field].tolist() if show_labels else None,
+                    textposition='top center' if show_labels else None,
+                ))
+            
+            # 添加第二个Y轴（如果有折线图）
+            if len(y) > 1:
+                fig.update_layout(
+                    yaxis2=dict(
+                        title=yaxis2_title or '',
+                        overlaying='y',
+                        side='right'
+                    )
+                )
         
+        # 更新布局
         fig.update_layout(
             title=title,
             xaxis_title=x,
