@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, cast
+from typing import Dict, Any, List, Optional, cast, Tuple, Union
 import pandas as pd
 from plotly.subplots import make_subplots
 
@@ -15,6 +15,157 @@ from tools.export_utils import (
     export_dashboard_to_png,
     export_dashboard_to_pdf,
 )
+
+
+def detect_date_field(df: pd.DataFrame, chart_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """
+    智能检测DataFrame中的日期字段
+    
+    Args:
+        df: 要检测的DataFrame
+        chart_config: 图表配置（可选，用于指定日期字段）
+    
+    Returns:
+        日期字段名，如果未找到则返回None
+    """
+    # 1. 优先从图表配置中获取指定的日期字段
+    if chart_config:
+        date_field_config = chart_config.get('date_field') or chart_config.get('time_field')
+        if date_field_config and date_field_config in df.columns:
+            return date_field_config
+    
+    # 2. 检测数据类型为datetime的列
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            return col
+    
+    # 3. 检测常见的日期相关列名（不区分大小写）
+    date_keywords = ['date', 'time', 'datetime', 'timestamp', 'created', 'updated', 
+                     '时间', '日期', '创建时间', '更新时间', '日期时间']
+    df_cols_lower = [col.lower() for col in df.columns]
+    
+    # 优先匹配更具体的日期关键词
+    for keyword in date_keywords:
+        for i, col_lower in enumerate(df_cols_lower):
+            if keyword in col_lower:
+                col_name = str(df.columns[i])  # 确保返回字符串类型
+                # 尝试转换为datetime类型来验证
+                try:
+                    pd.to_datetime(df[col_name].dropna().head(10), errors='raise')
+                    return col_name  # type: ignore
+                except (ValueError, TypeError):
+                    continue
+    
+    # 4. 尝试将字符串列转换为datetime来检测
+    for col in df.columns:
+        col_name = str(col)  # 确保是字符串类型
+        if df[col_name].dtype == 'object':  # 字符串类型
+            try:
+                # 取样检测前100行（或全部如果少于100行）
+                sample_size = min(100, len(df))
+                sample = df[col_name].dropna().head(sample_size)
+                if len(sample) > 0:
+                    # 尝试转换样本数据
+                    pd.to_datetime(sample, errors='raise')
+                    # 如果转换成功，这个列可能是日期字段
+                    return col_name
+            except (ValueError, TypeError):
+                continue
+    
+    return None
+
+
+def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[str] = None, 
+                      end_date: Optional[str] = None, chart_config: Optional[Dict[str, Any]] = None,
+                      date_field: Optional[str] = None) -> Tuple[pd.DataFrame, Union[str, None]]:
+    """
+    应用时间筛选到DataFrame
+    
+    Args:
+        df: 要筛选的DataFrame
+        time_filter: 时间筛选类型 ("all", "today", "7days", "30days", "month", "custom")
+        start_date: 自定义起始日期（仅当time_filter="custom"时使用）
+        end_date: 自定义结束日期（仅当time_filter="custom"时使用）
+        chart_config: 图表配置（可选）
+        date_field: 指定的日期字段（可选，如果不提供则自动检测）
+    
+    Returns:
+        (筛选后的DataFrame, 使用的日期字段名或错误消息)
+    """
+    # 如果是"全部"或无效筛选，直接返回原DataFrame
+    if not time_filter or time_filter == "none" or time_filter == "all":
+        return df, None
+    
+    # 检测日期字段
+    if not date_field:
+        date_field = detect_date_field(df, chart_config)
+    
+    if not date_field:
+        # 没有找到日期字段，返回原DataFrame和提示信息
+        return df, "未找到日期字段，无法应用时间筛选"
+    
+    # 确保日期字段是datetime类型
+    try:
+        if not pd.api.types.is_datetime64_any_dtype(df[date_field]):
+            # 尝试转换为datetime类型
+            df[date_field] = pd.to_datetime(df[date_field], errors='coerce')
+    except Exception as e:
+        return df, f"日期字段转换失败: {str(e)}"
+    
+    # 计算时间范围
+    now = pd.Timestamp.now()
+    start: Optional[pd.Timestamp] = None
+    end: Optional[pd.Timestamp] = None
+    
+    if time_filter == "custom":
+        if start_date and end_date:
+            try:
+                start_ts = pd.Timestamp(start_date)
+                end_ts = pd.Timestamp(end_date)
+                # 检查是否为NaT
+                if pd.isna(start_ts) or pd.isna(end_ts):
+                    return df, "日期格式错误: 无法解析日期"
+                start = cast(pd.Timestamp, start_ts)
+                end = cast(pd.Timestamp, end_ts)
+                # 确保end包含整天
+                if end.hour == 0 and end.minute == 0:
+                    end = cast(pd.Timestamp, end + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+            except (ValueError, TypeError) as e:
+                return df, f"日期格式错误: {str(e)}"
+        else:
+            return df, "自定义时间范围需要指定起始和结束日期"
+    elif time_filter == "today":
+        start = now.normalize()
+        end = now
+    elif time_filter == "7days":
+        start = cast(pd.Timestamp, (now - pd.Timedelta(days=7)).normalize())  # type: ignore
+        end = now
+    elif time_filter == "30days":
+        start = cast(pd.Timestamp, (now - pd.Timedelta(days=30)).normalize())  # type: ignore
+        end = now
+    elif time_filter == "month":
+        start = now.replace(day=1).normalize()
+        end = now
+    
+    # 应用筛选
+    if start is not None and end is not None:
+        try:
+            # 移除日期字段中的NaT值（无效日期）
+            df_valid = df[df[date_field].notna()].copy()
+            if len(df_valid) == 0:
+                return df, "日期字段中无有效日期数据"
+            
+            # 应用时间筛选
+            mask = (df_valid[date_field] >= start) & (df_valid[date_field] <= end)
+            df_filtered = df_valid[mask].copy()
+            
+            # 确保返回的是DataFrame类型
+            df_result = cast(pd.DataFrame, df_filtered)
+            return df_result, date_field
+        except Exception as e:
+            return df, f"时间筛选失败: {str(e)}"
+    
+    return df, None
 
 
 def create_dashboard_page():
@@ -98,13 +249,14 @@ def create_dashboard_page():
                                             dbc.RadioItems(
                                                 id="time-filter",
                                                 options=[
+                                                    {"label": "全部", "value": "all"},
                                                     {"label": "今天", "value": "today"},
                                                     {"label": "近7天", "value": "7days"},
                                                     {"label": "近30天", "value": "30days"},
                                                     {"label": "本月", "value": "month"},
                                                     {"label": "自定义", "value": "custom"},
                                                 ],
-                                                value="30days",
+                                                value="all",
                                                 inline=True,
                                             ),
                                             html.Div(id="custom-date-range", style={"display": "none"}, children=[
@@ -227,6 +379,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         """显示/隐藏自定义日期范围选择器"""
         if filter_value == "custom":
             return {"display": "block"}
+        # "全部"或其他选项时隐藏
         return {"display": "none"}
 
     @app.callback(
@@ -474,59 +627,34 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         current_row = []
                     continue
                 
-                # 应用时间筛选（如果有时间字段）
-                if time_filter and time_filter != "custom":
-                    date_field = None
-                    for col in df.columns:
-                        if pd.api.types.is_datetime64_any_dtype(df[col]) or 'date' in str(df[col].dtype).lower():
-                            date_field = col
-                            break
+                # 应用时间筛选（使用优化的筛选函数）
+                filter_warning = None
+                date_field_used = None
+                if time_filter:
+                    df_filtered, date_field_or_error = apply_time_filter(
+                        df, time_filter, start_date, end_date, chart_config
+                    )
+                    original_count = len(df)
+                    df = df_filtered
+                    filtered_count = len(df)
                     
-                    if date_field:
-                        now = pd.Timestamp.now()
-                        start: Optional[pd.Timestamp] = None
-                        end: Optional[pd.Timestamp] = None
-                        
-                        if time_filter == "today":
-                            start = now.normalize()
-                            end = now
-                        elif time_filter == "7days":
-                            delta_days = 7
-                            delta = pd.Timedelta(days=delta_days)
-                            start = (now - delta).normalize()  # type: ignore
-                            end = now
-                        elif time_filter == "30days":
-                            delta_days = 30
-                            delta = pd.Timedelta(days=delta_days)
-                            start = (now - delta).normalize()  # type: ignore
-                            end = now
-                        elif time_filter == "month":
-                            start = now.replace(day=1).normalize()
-                            end = now
-                        
-                        if start is not None and end is not None:
-                            # DataFrame 的布尔索引总是返回 DataFrame
-                            df_filtered = df[(df[date_field] >= start) & (df[date_field] <= end)]
-                            df = cast(pd.DataFrame, df_filtered)  # type: ignore
-                
-                if time_filter == "custom" and start_date and end_date:
-                    date_field = None
-                    for col in df.columns:
-                        if pd.api.types.is_datetime64_any_dtype(df[col]) or 'date' in str(df[col].dtype).lower():
-                            date_field = col
-                            break
-                    
-                    if date_field:
-                        try:
-                            custom_start = pd.Timestamp(start_date)  # type: ignore
-                            custom_end = pd.Timestamp(end_date)  # type: ignore
-                            # 检查是否为有效的Timestamp（不是NaT）
-                            if custom_start is not pd.NaT and custom_end is not pd.NaT:  # type: ignore
-                                # DataFrame 的布尔索引总是返回 DataFrame
-                                df_filtered = df[(df[date_field] >= custom_start) & (df[date_field] <= custom_end)]
-                                df = cast(pd.DataFrame, df_filtered)  # type: ignore
-                        except (ValueError, TypeError):
-                            # 如果日期转换失败，跳过筛选
+                    # 处理返回结果
+                    if isinstance(date_field_or_error, str):
+                        # 如果返回的是错误消息
+                        if "未找到日期字段" in date_field_or_error:
+                            filter_warning = date_field_or_error
+                        elif "失败" in date_field_or_error or "错误" in date_field_or_error:
+                            filter_warning = date_field_or_error
+                        elif "无有效日期数据" in date_field_or_error:
+                            filter_warning = date_field_or_error
+                    else:
+                        # 返回的是日期字段名
+                        date_field_used = date_field_or_error
+                        # 检查筛选后的数据是否为空
+                        if filtered_count == 0 and original_count > 0:
+                            filter_warning = f"时间筛选后无数据（筛选字段: {date_field_used}）"
+                        elif filtered_count < original_count:
+                            # 数据被筛选了，但不为空，可以选择显示筛选信息（可选）
                             pass
                 
                 # 应用图表联动筛选（如果存在筛选条件且当前图表不是源图表）
@@ -621,7 +749,19 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         ),
                         dbc.CardBody(
                             [
-                                dcc.Graph(figure=fig, id={"type": "dashboard-chart", "chart_id": chart_id}),
+                                html.Div([
+                                    dcc.Graph(figure=fig, id={"type": "dashboard-chart", "chart_id": chart_id}),
+                                    html.Div(
+                                        dbc.Alert(
+                                            [
+                                                html.I(className="fas fa-info-circle me-2"),
+                                                filter_warning
+                                            ],
+                                            color="info",
+                                            className="mt-2 mb-0 small"
+                                        ) if filter_warning else None
+                                    ),
+                                ]),
                             ]
                         ),
                     ],
