@@ -745,13 +745,17 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         Input("btn-save-dashboard-modal", "n_clicks"),
         [State("current-dashboard-id", "data"),
          State("dashboard-name-input", "value"),
-         State("dashboard-description-input", "value")],
+         State("dashboard-description-input", "value"),
+         State("dashboard-modal-header", "children")],
         prevent_initial_call=True
     )
-    def save_dashboard(save_clicks, current_id, name, description):
+    def save_dashboard(save_clicks, current_id, name, description, modal_header):
         """保存仪表盘"""
         if not name:
             return dash.no_update, dash.no_update, dash.no_update
+        
+        # 检查是新建还是编辑模式：只有明确是"编辑仪表盘"时才使用current_id
+        is_edit_mode = modal_header == "编辑仪表盘" if modal_header else False
         
         dashboard_config = {
             "name": name,
@@ -759,7 +763,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             "chart_ids": [],
         }
         
-        if current_id:
+        # 只有在编辑模式下才使用current_id，新建模式下不使用current_id（避免覆盖现有仪表盘）
+        if is_edit_mode and current_id:
             dashboard_config["id"] = current_id
             existing = config_manager.get_dashboard(current_id)
             if existing:
