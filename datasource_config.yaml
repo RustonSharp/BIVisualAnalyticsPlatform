@@ -1,0 +1,131 @@
+# BI 数据可视化与分析平台 - 数据源配置示例
+# 本文件展示了如何配置不同类型的数据源，包括本地文件、数据库和 REST API
+
+datasources:
+  # ==========================================
+  # 1. 本地文件数据源（CSV / Excel）
+  # ==========================================
+  - id: ds_file_001
+    type: file
+    name: 销售数据_CSV
+    description: 从本地 CSV 文件加载销售数据
+    file_path: uploads/sales_data.csv
+    # 字段映射（可选，用于重命名字段或指定字段类型）
+    field_mapping:
+      date: date          # 日期字段
+      amount: numeric     # 数值字段
+      category: text      # 文本字段
+    created_at: "2025-01-10T10:00:00"
+    updated_at: "2025-01-10T10:00:00"
+
+  - id: ds_file_002
+    type: file
+    name: 用户数据_Excel
+    description: 从 Excel 文件加载用户数据
+    file_path: uploads/user_data.xlsx
+    # Excel 特定配置
+    sheet_name: Sheet1    # 指定工作表名称（可选）
+    created_at: "2025-01-10T10:05:00"
+    updated_at: "2025-01-10T10:05:00"
+
+  # ==========================================
+  # 2. 数据库数据源（PostgreSQL / MySQL）
+  # ==========================================
+  - id: ds_db_001
+    type: database
+    name: 生产数据库_PostgreSQL
+    description: 连接 PostgreSQL 生产数据库
+    engine: postgresql    # 数据库类型：postgresql 或 mysql
+    host: localhost       # 数据库主机地址
+    port: 5432            # 数据库端口（PostgreSQL 默认 5432，MySQL 默认 3306）
+    database: sales_db    # 数据库名称
+    user: admin           # 数据库用户名
+    password: "your_password_here"  # 数据库密码（建议使用环境变量）
+    # SQL 查询语句（可选，如果不指定则使用默认查询）
+    sql: "SELECT * FROM sales WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'"
+    # 表名（如果使用默认查询，需要指定表名）
+    table: sales
+    # 连接池配置（可选）
+    pool_size: 5
+    max_overflow: 10
+    created_at: "2025-01-10T10:10:00"
+    updated_at: "2025-01-10T10:10:00"
+
+  - id: ds_db_002
+    type: database
+    name: 分析数据库_MySQL
+    description: 连接 MySQL 分析数据库
+    engine: mysql
+    host: 192.168.1.100
+    port: 3306
+    database: analytics_db
+    user: analyst
+    password: "your_password_here"
+    sql: "SELECT date, SUM(revenue) as total_revenue, COUNT(*) as order_count FROM orders GROUP BY date ORDER BY date DESC LIMIT 1000"
+    table: orders
+    created_at: "2025-01-10T10:15:00"
+    updated_at: "2025-01-10T10:15:00"
+
+  # ==========================================
+  # 3. REST API 数据源
+  # ==========================================
+  - id: ds_api_001
+    type: api
+    name: 销售API数据
+    description: 从 REST API 获取销售数据
+    url: https://api.example.com/sales/data
+    method: GET           # 请求方法：GET 或 POST
+    # 请求参数（可选）
+    params:
+      start_date: "2025-01-01"
+      end_date: "2025-01-31"
+      limit: 1000
+    # 请求头（可选）
+    headers:
+      Authorization: "Bearer your_token_here"
+      Content-Type: "application/json"
+    # POST 请求的 JSON 请求体（仅当 method 为 POST 时使用）
+    json_body: null
+    # 数据路径（如果 API 返回的数据在嵌套对象中，指定路径）
+    data_path: "data.results"  # 例如：{"data": {"results": [...]}}
+    created_at: "2025-01-10T10:20:00"
+    updated_at: "2025-01-10T10:20:00"
+
+  - id: ds_api_002
+    type: api
+    name: 用户行为API
+    description: 从 POST API 获取用户行为数据
+    url: https://api.example.com/user/behavior
+    method: POST
+    # POST 请求的 JSON 请求体
+    json_body:
+      filters:
+        date_range:
+          start: "2025-01-01"
+          end: "2025-01-31"
+        user_type: ["premium", "standard"]
+      pagination:
+        page: 1
+        page_size: 1000
+    headers:
+      Authorization: "Bearer your_token_here"
+      Content-Type: "application/json"
+    created_at: "2025-01-10T10:25:00"
+    updated_at: "2025-01-10T10:25:00"
+
+  # ==========================================
+  # 字段映射说明
+  # ==========================================
+  # field_mapping 用于指定字段的类型和映射关系：
+  # - date: 日期类型字段
+  # - numeric: 数值类型字段（整数或浮点数）
+  # - text: 文本类型字段
+  # - integer: 整数类型字段
+  #
+  # 示例：
+  # field_mapping:
+  #   order_date: date
+  #   revenue: numeric
+  #   customer_name: text
+  #   order_id: integer
+

@@ -10,13 +10,16 @@ from pathlib import Path
 from components.common import create_table_from_dataframe
 from data_adapter import DataSourceAdapter
 from load_data import load_from_file, DBConfig, load_from_database, load_from_api
+from language_manager import language_manager
 
 
 def create_datasource_page():
     """创建数据源管理页面"""
+    texts = language_manager.get_all_texts()
+    
     return dbc.Container(
         [
-            html.H2("数据源管理", className="mb-4"),
+            html.H2(texts["datasource_management_title"], id="datasource-page-title", className="mb-4"),
             
             # 数据源列表卡片
             dbc.Row(
@@ -26,15 +29,15 @@ def create_datasource_page():
                             [
                                 dbc.CardHeader(
                                     [
-                                        html.H5("数据源列表", className="mb-0"),
-                                        dbc.Button("+ 新增数据源", color="primary", size="sm", className="float-end", id="btn-add-datasource"),
+                                        html.H5(texts["datasource_list"], id="datasource-list-header", className="mb-0"),
+                                        dbc.Button(texts["add_datasource"], id="btn-add-datasource", color="primary", size="sm", className="float-end"),
                                     ],
                                     className="d-flex justify-content-between align-items-center",
                                 ),
                                 dbc.CardBody(
                                     [
                                         html.Div(id="datasource-list", children=[
-                                            html.P("加载中...", className="text-muted text-center py-5"),
+                                            html.P(texts["loading"], className="text-muted text-center py-5"),
                                         ]),
                                     ]
                                 ),
@@ -60,7 +63,7 @@ def create_datasource_page():
                                     dbc.Tab(
                                         [
                                             html.Div([
-                                                html.Label("上传文件", className="form-label mt-3"),
+                                                html.Label(texts["upload_file"], id="upload-file-label", className="form-label mt-3"),
                                                 html.Div([
                                                     # 上传组件，使用按钮样式
                                                     dcc.Upload(
@@ -68,7 +71,7 @@ def create_datasource_page():
                                                         children=dbc.Button(
                                                             [
                                                                 html.I(className="fas fa-upload me-2"),
-                                                                "上传文件"
+                                                                texts["upload_file_button"]
                                                             ],
                                                             color="primary",
                                                             className="mb-2",
@@ -76,16 +79,16 @@ def create_datasource_page():
                                                         multiple=False,
                                                     ),
                                                     html.Div(
-                                                        html.Small("支持 CSV、Excel (.xls, .xlsx)", className="text-muted d-block"),
+                                                        html.Small(texts["supported_formats"], id="supported-formats-text", className="text-muted d-block"),
                                                         className="mb-2"
                                                     ),
                                                 ]),
                                                 html.Div(id="file-upload-status", className="mt-2"),
-                                                html.Label("数据源名称", className="form-label mt-3"),
-                                                dbc.Input(id="datasource-name-file", placeholder="例如: 销售数据", type="text"),
+                                                html.Label(texts["datasource_name"], id="datasource-name-file-label", className="form-label mt-3"),
+                                                dbc.Input(id="datasource-name-file", placeholder=texts["datasource_name_placeholder"], type="text"),
                                             ]),
                                         ],
-                                        label="本地文件 (CSV/Excel)",
+                                        label=texts["local_file"],
                                         tab_id="tab-file",
                                     ),
                                     dbc.Tab(

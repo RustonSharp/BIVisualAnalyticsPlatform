@@ -1,0 +1,131 @@
+# BI Data Visualization & Analytics Platform - Datasource Configuration Examples
+# This file demonstrates how to configure different types of datasources, including local files, databases, and REST APIs
+
+datasources:
+  # ==========================================
+  # 1. Local File Datasource (CSV / Excel)
+  # ==========================================
+  - id: ds_file_001
+    type: file
+    name: Sales_Data_CSV
+    description: Load sales data from local CSV file
+    file_path: uploads/sales_data.csv
+    # Field mapping (optional, for renaming fields or specifying field types)
+    field_mapping:
+      date: date          # Date field
+      amount: numeric     # Numeric field
+      category: text      # Text field
+    created_at: "2025-01-10T10:00:00"
+    updated_at: "2025-01-10T10:00:00"
+
+  - id: ds_file_002
+    type: file
+    name: User_Data_Excel
+    description: Load user data from Excel file
+    file_path: uploads/user_data.xlsx
+    # Excel-specific configuration
+    sheet_name: Sheet1    # Specify worksheet name (optional)
+    created_at: "2025-01-10T10:05:00"
+    updated_at: "2025-01-10T10:05:00"
+
+  # ==========================================
+  # 2. Database Datasource (PostgreSQL / MySQL)
+  # ==========================================
+  - id: ds_db_001
+    type: database
+    name: Production_DB_PostgreSQL
+    description: Connect to PostgreSQL production database
+    engine: postgresql    # Database type: postgresql or mysql
+    host: localhost       # Database host address
+    port: 5432            # Database port (PostgreSQL default: 5432, MySQL default: 3306)
+    database: sales_db    # Database name
+    user: admin           # Database username
+    password: "your_password_here"  # Database password (recommended to use environment variables)
+    # SQL query statement (optional, if not specified, default query will be used)
+    sql: "SELECT * FROM sales WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'"
+    # Table name (required if using default query)
+    table: sales
+    # Connection pool configuration (optional)
+    pool_size: 5
+    max_overflow: 10
+    created_at: "2025-01-10T10:10:00"
+    updated_at: "2025-01-10T10:10:00"
+
+  - id: ds_db_002
+    type: database
+    name: Analytics_DB_MySQL
+    description: Connect to MySQL analytics database
+    engine: mysql
+    host: 192.168.1.100
+    port: 3306
+    database: analytics_db
+    user: analyst
+    password: "your_password_here"
+    sql: "SELECT date, SUM(revenue) as total_revenue, COUNT(*) as order_count FROM orders GROUP BY date ORDER BY date DESC LIMIT 1000"
+    table: orders
+    created_at: "2025-01-10T10:15:00"
+    updated_at: "2025-01-10T10:15:00"
+
+  # ==========================================
+  # 3. REST API Datasource
+  # ==========================================
+  - id: ds_api_001
+    type: api
+    name: Sales_API_Data
+    description: Fetch sales data from REST API
+    url: https://api.example.com/sales/data
+    method: GET           # Request method: GET or POST
+    # Request parameters (optional)
+    params:
+      start_date: "2025-01-01"
+      end_date: "2025-01-31"
+      limit: 1000
+    # Request headers (optional)
+    headers:
+      Authorization: "Bearer your_token_here"
+      Content-Type: "application/json"
+    # JSON request body for POST requests (only used when method is POST)
+    json_body: null
+    # Data path (if API returns data in nested object, specify the path)
+    data_path: "data.results"  # Example: {"data": {"results": [...]}}
+    created_at: "2025-01-10T10:20:00"
+    updated_at: "2025-01-10T10:20:00"
+
+  - id: ds_api_002
+    type: api
+    name: User_Behavior_API
+    description: Fetch user behavior data from POST API
+    url: https://api.example.com/user/behavior
+    method: POST
+    # JSON request body for POST request
+    json_body:
+      filters:
+        date_range:
+          start: "2025-01-01"
+          end: "2025-01-31"
+        user_type: ["premium", "standard"]
+      pagination:
+        page: 1
+        page_size: 1000
+    headers:
+      Authorization: "Bearer your_token_here"
+      Content-Type: "application/json"
+    created_at: "2025-01-10T10:25:00"
+    updated_at: "2025-01-10T10:25:00"
+
+  # ==========================================
+  # Field Mapping Instructions
+  # ==========================================
+  # field_mapping is used to specify field types and mapping relationships:
+  # - date: Date type field
+  # - numeric: Numeric type field (integer or float)
+  # - text: Text type field
+  # - integer: Integer type field
+  #
+  # Example:
+  # field_mapping:
+  #   order_date: date
+  #   revenue: numeric
+  #   customer_name: text
+  #   order_id: integer
+

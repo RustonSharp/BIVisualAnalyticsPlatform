@@ -1,6 +1,7 @@
 """侧边栏组件"""
 import dash_bootstrap_components as dbc
 from dash import html
+from language_manager import language_manager
 
 SIDEBAR_STYLE = {
     "position": "fixed",
@@ -22,32 +23,34 @@ CONTENT_STYLE = {
 
 def create_sidebar():
     """创建侧边栏导航"""
+    texts = language_manager.get_all_texts()
+    
     return html.Div(
         [
-            html.H3("BI Platform", className="mb-4", style={"color": "#2c3e50"}),
+            html.H3(texts["sidebar_title"], id="sidebar-title", className="mb-4", style={"color": "#2c3e50"}),
             html.Hr(),
             dbc.Nav(
                 [
                     dbc.NavLink(
-                        [html.I(className="fas fa-database me-2"), "数据源管理"],
+                        [html.I(className="fas fa-database me-2"), html.Span(texts["datasource_management"], id="nav-datasource")],
                         href="/datasource",
                         active="exact",
                         className="nav-link-custom",
                     ),
                     dbc.NavLink(
-                        [html.I(className="fas fa-chart-line me-2"), "图表设计器"],
+                        [html.I(className="fas fa-chart-line me-2"), html.Span(texts["chart_designer"], id="nav-chart-designer")],
                         href="/chart-designer",
                         active="exact",
                         className="nav-link-custom",
                     ),
                     dbc.NavLink(
-                        [html.I(className="fas fa-tachometer-alt me-2"), "仪表盘"],
+                        [html.I(className="fas fa-tachometer-alt me-2"), html.Span(texts["dashboard"], id="nav-dashboard")],
                         href="/dashboard",
                         active="exact",
                         className="nav-link-custom",
                     ),
                     dbc.NavLink(
-                        [html.I(className="fas fa-cog me-2"), "设置"],
+                        [html.I(className="fas fa-cog me-2"), html.Span(texts["settings"], id="nav-settings")],
                         href="/settings",
                         active="exact",
                         className="nav-link-custom",
@@ -59,12 +62,13 @@ def create_sidebar():
             html.Hr(className="my-4"),
             html.Div(
                 [
-                    html.P("版本: v1.0", className="text-muted small"),
-                    html.P("仅 UI 界面", className="text-muted small"),
+                    html.P([texts["version"], ": v1.0"], id="sidebar-version", className="text-muted small"),
+                    html.P(texts["ui_only"], id="sidebar-ui-only", className="text-muted small"),
                 ],
                 style={"position": "absolute", "bottom": "2rem"}
             ),
         ],
         style=SIDEBAR_STYLE,
+        id="sidebar-container",
     )
 

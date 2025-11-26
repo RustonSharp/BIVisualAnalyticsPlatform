@@ -1,0 +1,273 @@
+{
+  "description": "BI 数据可视化与分析平台 - 图表配置示例",
+  "version": "1.0.0",
+  "charts": [
+    {
+      "id": "chart_line_001",
+      "name": "销售额趋势图",
+      "description": "展示销售额随时间的变化趋势",
+      "datasource_id": "ds_file_001",
+      "type": "line",
+      "x": "date",
+      "y": "amount",
+      "group": null,
+      "title": "销售额趋势分析",
+      "color_theme": "default",
+      "custom_colors": {},
+      "show_labels": false,
+      "show_legend": true,
+      "agg_function": "sum",
+      "created_at": "2025-01-10T10:30:00",
+      "updated_at": "2025-01-10T10:30:00",
+      "filters": {
+        "date_range": {
+          "enabled": true,
+          "start": null,
+          "end": null
+        }
+      }
+    },
+    {
+      "id": "chart_bar_001",
+      "name": "分类销售额对比",
+      "description": "按分类对比销售额",
+      "datasource_id": "ds_file_001",
+      "type": "bar",
+      "x": "category",
+      "y": "amount",
+      "group": null,
+      "title": "各分类销售额对比",
+      "color_theme": "blue",
+      "custom_colors": {
+        "电子产品": "#1f77b4",
+        "服装": "#ff7f0e",
+        "食品": "#2ca02c",
+        "图书": "#d62728"
+      },
+      "show_labels": true,
+      "show_legend": false,
+      "agg_function": "sum",
+      "created_at": "2025-01-10T10:35:00",
+      "updated_at": "2025-01-10T10:35:00"
+    },
+    {
+      "id": "chart_pie_001",
+      "name": "销售占比饼图",
+      "description": "展示各分类销售额占比",
+      "datasource_id": "ds_file_001",
+      "type": "pie",
+      "x": "category",
+      "y": "amount",
+      "group": null,
+      "title": "销售分类占比",
+      "color_theme": "default",
+      "custom_colors": {
+        "电子产品": "#1f77b4",
+        "服装": "#ff7f0e",
+        "食品": "#2ca02c",
+        "图书": "#d62728"
+      },
+      "show_labels": true,
+      "show_legend": true,
+      "agg_function": "sum",
+      "created_at": "2025-01-10T10:40:00",
+      "updated_at": "2025-01-10T10:40:00"
+    },
+    {
+      "id": "chart_table_001",
+      "name": "销售明细表",
+      "description": "展示详细的销售数据表格",
+      "datasource_id": "ds_file_001",
+      "type": "table",
+      "x": "date",
+      "y": "amount",
+      "group": null,
+      "title": "销售明细数据",
+      "color_theme": "default",
+      "custom_colors": {},
+      "show_labels": false,
+      "show_legend": false,
+      "agg_function": "none",
+      "table_columns": [
+        "date",
+        "category",
+        "amount",
+        "quantity"
+      ],
+      "table_rows": [],
+      "table_orientation": "horizontal",
+      "created_at": "2025-01-10T10:45:00",
+      "updated_at": "2025-01-10T10:45:00",
+      "filters": {
+        "date_range": {
+          "enabled": true,
+          "start": "2025-01-01",
+          "end": "2025-01-31"
+        }
+      }
+    },
+    {
+      "id": "chart_combo_001",
+      "name": "销售额与订单数组合图",
+      "description": "同时展示销售额（柱状图）和订单数（折线图）",
+      "datasource_id": "ds_db_001",
+      "type": "combo",
+      "x": "date",
+      "y": "total_revenue",
+      "y2": "order_count",
+      "group": null,
+      "title": "销售额与订单数趋势",
+      "color_theme": "default",
+      "custom_colors": {},
+      "show_labels": false,
+      "show_legend": true,
+      "agg_function": "sum",
+      "created_at": "2025-01-10T10:50:00",
+      "updated_at": "2025-01-10T10:50:00"
+    },
+    {
+      "id": "chart_line_grouped_001",
+      "name": "多系列趋势图",
+      "description": "按分类分组展示趋势",
+      "datasource_id": "ds_file_001",
+      "type": "line",
+      "x": "date",
+      "y": "amount",
+      "group": "category",
+      "title": "各分类销售额趋势",
+      "color_theme": "default",
+      "custom_colors": {
+        "电子产品": "#1f77b4",
+        "服装": "#ff7f0e",
+        "食品": "#2ca02c"
+      },
+      "show_labels": false,
+      "show_legend": true,
+      "agg_function": "sum",
+      "created_at": "2025-01-10T10:55:00",
+      "updated_at": "2025-01-10T10:55:00"
+    }
+  ],
+  "chart_styles": {
+    "themes": {
+      "default": {
+        "colors": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"],
+        "background": "white",
+        "grid": true
+      },
+      "blue": {
+        "colors": ["#1e3a8a", "#3b82f6", "#60a5fa", "#93c5fd", "#dbeafe"],
+        "background": "white",
+        "grid": true
+      },
+      "green": {
+        "colors": ["#065f46", "#059669", "#10b981", "#34d399", "#a7f3d0"],
+        "background": "white",
+        "grid": true
+      },
+      "purple": {
+        "colors": ["#581c87", "#7c3aed", "#a78bfa", "#c4b5fd", "#e9d5ff"],
+        "background": "white",
+        "grid": true
+      }
+    },
+    "default_settings": {
+      "font_family": "Arial, sans-serif",
+      "font_size": 12,
+      "title_font_size": 16,
+      "width": 800,
+      "height": 400,
+      "margin": {
+        "l": 60,
+        "r": 60,
+        "t": 80,
+        "b": 60
+      }
+    }
+  },
+  "filter_rules": {
+    "date_range": {
+      "enabled": false,
+      "default_range": "last_30_days",
+      "presets": [
+        "today",
+        "last_7_days",
+        "last_30_days",
+        "last_90_days",
+        "this_month",
+        "last_month",
+        "this_year",
+        "last_year"
+      ]
+    },
+    "value_filters": {
+      "enabled": false,
+      "min_value": null,
+      "max_value": null
+    },
+    "category_filters": {
+      "enabled": false,
+      "included_categories": [],
+      "excluded_categories": []
+    }
+  },
+  "interaction_rules": {
+    "chart_linking": {
+      "enabled": false,
+      "source_chart_id": null,
+      "target_chart_ids": [],
+      "link_type": "filter"
+    },
+    "drill_down": {
+      "enabled": false,
+      "drill_levels": [],
+      "drill_field": null
+    }
+  },
+  "aggregation_functions": {
+    "sum": "求和",
+    "avg": "平均值",
+    "count": "计数",
+    "max": "最大值",
+    "min": "最小值",
+    "none": "不聚合"
+  },
+  "chart_types": {
+    "line": {
+      "name": "折线图",
+      "description": "用于展示数据随时间或类别的变化趋势",
+      "suitable_for": ["时间序列", "趋势分析"],
+      "required_fields": ["x", "y"],
+      "optional_fields": ["group"]
+    },
+    "bar": {
+      "name": "柱状图",
+      "description": "用于对比不同类别的数值",
+      "suitable_for": ["类别对比", "排名分析"],
+      "required_fields": ["x", "y"],
+      "optional_fields": ["group"]
+    },
+    "pie": {
+      "name": "饼图",
+      "description": "用于展示各部分占整体的比例",
+      "suitable_for": ["占比分析", "组成结构"],
+      "required_fields": ["x", "y"],
+      "optional_fields": []
+    },
+    "table": {
+      "name": "表格",
+      "description": "用于展示详细的数据明细",
+      "suitable_for": ["明细数据", "数据查看"],
+      "required_fields": ["table_columns"],
+      "optional_fields": []
+    },
+    "combo": {
+      "name": "组合图",
+      "description": "同时展示两种不同类型的图表（如柱状图+折线图）",
+      "suitable_for": ["多指标对比", "关联分析"],
+      "required_fields": ["x", "y", "y2"],
+      "optional_fields": ["group"]
+    }
+  }
+}
+

@@ -2,7 +2,7 @@
 BI 数据可视化与分析平台 - 主应用入口（重构版）
 """
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 from pathlib import Path
 
@@ -59,11 +59,15 @@ EXPORT_DIR.mkdir(exist_ok=True)
 # ==========================================
 # 主布局
 # ==========================================
+# 导入语言管理器
+from language_manager import language_manager
+
 app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="datasource-save-success", data=False),
         dcc.Store(id="global-refresh-interval-setting", data="off"),  # 全局刷新间隔设置
+        dcc.Store(id="global-language-setting", data=language_manager.get_language()),  # 全局语言设置
         create_sidebar(),
         html.Div(id="page-content", style=CONTENT_STYLE),
     ]
@@ -105,6 +109,50 @@ register_dashboard_callbacks(app, config_manager, data_source_manager, chart_eng
 # 注册设置页面回调
 from pages.settings_page import register_settings_callbacks
 register_settings_callbacks(app)
+
+# ==========================================
+# 语言切换全局回调
+# ==========================================
+@app.callback(
+    [Output("sidebar-title", "children", allow_duplicate=True),
+     Output("nav-datasource", "children", allow_duplicate=True),
+     Output("nav-chart-designer", "children", allow_duplicate=True),
+     Output("nav-dashboard", "children", allow_duplicate=True),
+     Output("nav-settings", "children", allow_duplicate=True),
+     Output("sidebar-version", "children", allow_duplicate=True),
+     Output("sidebar-ui-only", "children", allow_duplicate=True),
+     Output("page-content", "children", allow_duplicate=True)],
+    [Input("global-language-setting", "data")],
+    [State("url", "pathname")],
+    prevent_initial_call=True
+)
+def update_all_pages_on_language_change(language, pathname):
+    """语言变化时更新所有页面和侧边栏"""
+    texts = language_manager.get_all_texts(language)
+    
+    # 更新侧边栏
+    sidebar_title = texts["sidebar_title"]
+    nav_datasource = texts["datasource_management"]
+    nav_chart_designer = texts["chart_designer"]
+    nav_dashboard = texts["dashboard"]
+    nav_settings = texts["settings"]
+    sidebar_version = [texts["version"], ": v1.0"]
+    sidebar_ui_only = texts["ui_only"]
+    
+    # 更新当前页面
+    if pathname == "/" or pathname == "/datasource":
+        page_content = create_datasource_page()
+    elif pathname == "/chart-designer":
+        page_content = create_chart_designer_page()
+    elif pathname == "/dashboard":
+        page_content = create_dashboard_page()
+    elif pathname == "/settings":
+        page_content = create_settings_page()
+    else:
+        page_content = create_datasource_page()
+    
+    return (sidebar_title, nav_datasource, nav_chart_designer, nav_dashboard, 
+            nav_settings, sidebar_version, sidebar_ui_only, page_content)
 
 # ==========================================
 # 启动应用
