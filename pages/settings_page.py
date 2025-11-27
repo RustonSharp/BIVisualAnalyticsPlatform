@@ -53,21 +53,7 @@ def create_settings_page():
                                                 value="default",
                                                 className="mb-3",
                                             ),
-                                            dbc.Button(texts["save_settings"], id="btn-save-settings", color="primary", className="mb-3"),
-                                            html.Div(id="settings-save-status", children=[]),
-                                            dcc.Store(id="settings-save-status-message", data=None),  # 存储保存状态消息和时间戳
-                                            dcc.Interval(id="settings-save-status-interval", interval=100, disabled=True),  # 用于定时清除消息
-                                        ]
-                                    ),
-                                ],
-                                className="mb-4",
-                            ),
-                            
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader(id="language-settings-header", children=texts["language_settings"]),
-                                    dbc.CardBody(
-                                        [
+                                            html.Hr(className="my-3"),
                                             html.Label(id="select-language-label", children=texts["select_language"], className="form-label"),
                                             dbc.ButtonGroup(
                                                 [
@@ -90,6 +76,11 @@ def create_settings_page():
                                             html.Div(id="language-change-status", children=[]),
                                             dcc.Store(id="language-change-message", data=None),
                                             dcc.Interval(id="language-change-interval", interval=100, disabled=True),
+                                            html.Hr(className="my-3"),
+                                            dbc.Button(texts["save_settings"], id="btn-save-settings", color="primary", className="mb-3"),
+                                            html.Div(id="settings-save-status", children=[]),
+                                            dcc.Store(id="settings-save-status-message", data=None),  # 存储保存状态消息和时间戳
+                                            dcc.Interval(id="settings-save-status-interval", interval=100, disabled=True),  # 用于定时清除消息
                                         ]
                                     ),
                                 ],
@@ -220,10 +211,22 @@ def register_settings_callbacks(app):
         from dash import callback_context
         
         ctx = callback_context
+        
         if not ctx.triggered:
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
-        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        trigger_info = ctx.triggered[0]
+        button_id = trigger_info['prop_id'].split('.')[0]
+        prop_id = trigger_info['prop_id']
+        
+        # 只处理 n_clicks 属性的变化，忽略其他属性（如 color, outline）的变化
+        if '.n_clicks' not in prop_id:
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        
+        # 检查点击次数是否有效（必须大于0）
+        if (button_id == "btn-lang-zh" and (zh_clicks is None or zh_clicks == 0)) or \
+           (button_id == "btn-lang-en" and (en_clicks is None or en_clicks == 0)):
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
         # 确定要切换到的语言
         if button_id == "btn-lang-zh":
@@ -299,7 +302,6 @@ def register_settings_callbacks(app):
          Output("refresh-interval", "options", allow_duplicate=True),
          Output("default-theme", "options", allow_duplicate=True),
          Output("btn-save-settings", "children", allow_duplicate=True),
-         Output("language-settings-header", "children", allow_duplicate=True),
          Output("select-language-label", "children", allow_duplicate=True),
          Output("datasource-config-header", "children", allow_duplicate=True),
          Output("export-config-label", "children", allow_duplicate=True),
@@ -311,6 +313,11 @@ def register_settings_callbacks(app):
     )
     def update_settings_page_texts(language):
         """语言变化时更新设置页面的文本"""
+        # 确保语言有效
+        if not language or language not in ["zh", "en"]:
+            language = language_manager.get_language()
+        # 确保语言管理器使用正确的语言
+        language_manager.set_language(language)
         texts = language_manager.get_all_texts(language)
         
         # 更新刷新间隔选项
@@ -338,7 +345,6 @@ def register_settings_callbacks(app):
             refresh_options,  # 刷新间隔选项
             theme_options,  # 主题选项
             texts["save_settings"],  # 保存设置按钮
-            texts["language_settings"],  # 语言设置标题
             texts["select_language"],  # 选择语言标签
             texts["datasource_config"],  # 数据源配置标题
             texts["export_config"],  # 导出配置标签

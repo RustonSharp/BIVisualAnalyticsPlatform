@@ -10,20 +10,22 @@ SIDEBAR_STYLE = {
     "bottom": 0,
     "width": "16rem",
     "padding": "2rem 1rem",
-    "background-color": "#f8f9fa",
-    "border-right": "1px solid #dee2e6",
+    "backgroundColor": "#f8f9fa",
+    "borderRight": "1px solid #dee2e6",
 }
 
 CONTENT_STYLE = {
-    "margin-left": "18rem",
-    "margin-right": "2rem",
+    "marginLeft": "18rem",
+    "marginRight": "2rem",
     "padding": "2rem 1rem",
 }
 
 
 def create_sidebar():
     """创建侧边栏导航"""
-    texts = language_manager.get_all_texts()
+    # 确保使用当前语言（从配置文件加载）
+    current_lang = language_manager.get_language()
+    texts = language_manager.get_all_texts(current_lang)
     
     return html.Div(
         [

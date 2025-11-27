@@ -62,12 +62,15 @@ EXPORT_DIR.mkdir(exist_ok=True)
 # 导入语言管理器
 from language_manager import language_manager
 
+# 初始化时加载语言设置
+initial_language = language_manager.load_language()
+
 app.layout = html.Div(
     [
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="datasource-save-success", data=False),
         dcc.Store(id="global-refresh-interval-setting", data="off"),  # 全局刷新间隔设置
-        dcc.Store(id="global-language-setting", data=language_manager.get_language()),  # 全局语言设置
+        dcc.Store(id="global-language-setting", data=initial_language),  # 全局语言设置，从配置文件加载
         create_sidebar(),
         html.Div(id="page-content", style=CONTENT_STYLE),
     ]
@@ -77,22 +80,51 @@ app.layout = html.Div(
 # 路由回调
 # ==========================================
 @app.callback(
-    Output("page-content", "children"),
-    Input("url", "pathname")
+    [Output("page-content", "children"),
+     Output("global-language-setting", "data", allow_duplicate=True)],
+    Input("url", "pathname"),
+    State("global-language-setting", "data"),
+    prevent_initial_call='initial_duplicate'
 )
-def display_page(pathname):
+def display_page(pathname, language):
     """根据路径显示对应页面"""
+    # 始终以配置文件为准（配置文件是持久化的，是真实的数据源）
+    # Store 的值在刷新时可能被重置为初始值，所以不能完全信任
+    config_lang = language_manager.load_language()
+    
+    # 确定要使用的语言：优先使用配置文件中的值
+    if config_lang and config_lang in ["zh", "en"]:
+        effective_language = config_lang
+    elif language and language in ["zh", "en"]:
+        # 如果配置文件无效，但 Store 有效，使用 Store 的值并更新配置文件
+        effective_language = language
+        language_manager.save_language(language)
+    else:
+        # 都无效，使用默认值
+        effective_language = "zh"
+        language_manager.save_language("zh")
+    
+    # 确保语言管理器使用正确的语言（必须在创建页面之前设置）
+    language_manager.set_language(effective_language)
+    
+    # 创建页面（此时语言管理器已经使用正确的语言）
     if pathname == "/" or pathname == "/datasource":
-        return create_datasource_page()
+        page_content = create_datasource_page()
     elif pathname == "/chart-designer":
-        return create_chart_designer_page()
+        page_content = create_chart_designer_page()
     elif pathname == "/dashboard":
-        return create_dashboard_page()
+        page_content = create_dashboard_page()
     elif pathname == "/settings":
-        return create_settings_page()
+        page_content = create_settings_page()
     else:
         # 默认跳转到数据源页面
-        return create_datasource_page()
+        page_content = create_datasource_page()
+    
+    # 如果 Store 的值与配置文件不一致，更新 Store
+    if language != effective_language:
+        return page_content, effective_language
+    else:
+        return page_content, dash.no_update
 
 # ==========================================
 # 注册所有页面的回调函数
@@ -128,6 +160,12 @@ register_settings_callbacks(app)
 )
 def update_all_pages_on_language_change(language, pathname):
     """语言变化时更新所有页面和侧边栏"""
+    # 确保语言管理器使用正确的语言
+    if language and language in ["zh", "en"]:
+        language_manager.set_language(language)
+    else:
+        # 如果 language 无效，使用语言管理器的当前值
+        language = language_manager.get_language()
     texts = language_manager.get_all_texts(language)
     
     # 更新侧边栏

@@ -9,13 +9,15 @@ from typing import Dict, Any, List, Optional
 from components.common import default_chart_assignments, render_assigned_fields, create_table_from_dataframe
 from data_adapter import DataSourceAdapter
 import pandas as pd
+from language_manager import language_manager
 
 
 def create_chart_designer_page():
     """创建图表设计器页面"""
+    texts = language_manager.get_all_texts()
     return dbc.Container(
         [
-            html.H2("图表设计器", className="mb-4"),
+            html.H2(texts["chart_designer_title"], id="chart-designer-title", className="mb-4"),
             dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
             dcc.Store(id="custom-colors-config", data={}),
             dcc.Store(id="field-agg-functions-config", data={}),  # 存储每个字段的聚合函数配置
@@ -29,7 +31,7 @@ def create_chart_designer_page():
                             # 数据源选择
                             dbc.Card(
                                 [
-                                    dbc.CardHeader("选择数据源"),
+                                    dbc.CardHeader(texts["select_datasource"], id="select-datasource-header"),
                                     dbc.CardBody(
                                         [
                                             dbc.Select(
@@ -46,11 +48,11 @@ def create_chart_designer_page():
                             # 字段列表
                             dbc.Card(
                                 [
-                                    dbc.CardHeader("字段列表（可拖拽）"),
+                                    dbc.CardHeader(texts["field_list"], id="field-list-header"),
                                     dbc.CardBody(
                                         [
                                             html.Div(
-                                                html.P("请选择数据源后查看字段", className="text-muted mb-0"),
+                                                html.P(texts["select_datasource_first"], id="field-list-hint", className="text-muted mb-0"),
                                                 id="field-list",
                                             ),
                                         ]
@@ -62,17 +64,17 @@ def create_chart_designer_page():
                             # 图表类型选择
                             dbc.Card(
                                 [
-                                    dbc.CardHeader("图表类型"),
+                                    dbc.CardHeader(texts["chart_type"], id="chart-type-header"),
                                     dbc.CardBody(
                                         [
                                             dbc.RadioItems(
                                                 id="chart-type",
                                                 options=[
-                                                    {"label": "折线图", "value": "line"},
-                                                    {"label": "柱状图", "value": "bar"},
-                                                    {"label": "饼图", "value": "pie"},
-                                                    {"label": "表格", "value": "table"},
-                                                    {"label": "组合图", "value": "combo"},
+                                                    {"label": texts["line_chart"], "value": "line"},
+                                                    {"label": texts["bar_chart"], "value": "bar"},
+                                                    {"label": texts["pie_chart"], "value": "pie"},
+                                                    {"label": texts["table"], "value": "table"},
+                                                    {"label": texts["combo_chart"], "value": "combo"},
                                                 ],
                                                 value="line",
                                                 inline=True,
@@ -87,7 +89,7 @@ def create_chart_designer_page():
                             html.Div(id="chart-config-area", children=[
                                 dbc.Card(
                                     [
-                                        dbc.CardHeader("图表配置"),
+                                        dbc.CardHeader(texts["chart_config"], id="chart-config-header"),
                                         dbc.CardBody(
                                             [
                                                 # 普通图表配置（折线图、柱状图等）
@@ -98,19 +100,19 @@ def create_chart_designer_page():
                                                             html.Div(id="x-axis-config", children=[
                                                                 html.Div(
                                                                     [
-                                                                        html.Label("X 轴", className="form-label fw-bold mb-0"),
-                                                                        dbc.Button("清空", id="btn-clear-x-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                                        html.Label(texts["x_axis"], className="form-label fw-bold mb-0"),
+                                                                        dbc.Button(texts["clear"], id="btn-clear-x-axis", color="link", size="sm", className="p-0 ms-2"),
                                                                     ],
                                                                     className="d-flex align-items-center mb-2"
                                                                 ),
                                                                 html.Div(
                                                                     id="drop-x-axis",
                                                                     children=[
-                                                                        html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                        html.P(texts["drag_field_here"], className="text-muted text-center mb-0"),
                                                                     ],
                                                                     style={
-                                                                        "min-height": "60px",
-                                                                        "margin-bottom": "15px",
+                                                                        "minHeight": "60px",
+                                                                        "marginBottom": "15px",
                                                                         "border": "2px dashed #ced4da",
                                                                         "borderRadius": "6px",
                                                                         "padding": "0.5rem"
@@ -121,20 +123,20 @@ def create_chart_designer_page():
                                                             # Y 轴配置
                                                             html.Div(
                                                                 [
-                                                                    html.Label(id="y-axis-label", children="Y 轴", className="form-label fw-bold mb-0"),
-                                                                    dbc.Button("清空", id="btn-clear-y-axis", color="link", size="sm", className="p-0 ms-2"),
+                                                                    html.Label(id="y-axis-label", children=texts["y_axis"], className="form-label fw-bold mb-0"),
+                                                                    dbc.Button(texts["clear"], id="btn-clear-y-axis", color="link", size="sm", className="p-0 ms-2"),
                                                                 ],
                                                                 className="d-flex align-items-center mb-2"
                                                             ),
-                                                            html.P(id="y-axis-hint", children="拖拽字段到此处", className="text-muted text-center mb-2 small"),
+                                                            html.P(id="y-axis-hint", children=texts["drag_field_here"], className="text-muted text-center mb-2 small"),
                                                             html.Div(
                                                                 id="drop-y-axis",
                                                                 children=[
                                                                     html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
-                                                                    "min-height": "60px",
-                                                                    "margin-bottom": "15px",
+                                                                    "minHeight": "60px",
+                                                                    "marginBottom": "15px",
                                                                     "border": "2px dashed #ced4da",
                                                                     "borderRadius": "6px",
                                                                     "padding": "0.5rem"
@@ -144,20 +146,20 @@ def create_chart_designer_page():
                                                             # 分组配置
                                                             html.Div(
                                                                 [
-                                                                    html.Label(id="group-label", children="分组/颜色", className="form-label fw-bold mb-0"),
-                                                                    dbc.Button("清空", id="btn-clear-group", color="link", size="sm", className="p-0 ms-2"),
+                                                                    html.Label(id="group-label", children=texts["group_color"], className="form-label fw-bold mb-0"),
+                                                                    dbc.Button(texts["clear"], id="btn-clear-group", color="link", size="sm", className="p-0 ms-2"),
                                                                 ],
                                                                 className="d-flex align-items-center mb-2"
                                                             ),
-                                                            html.P(id="group-hint", children="拖拽字段到此处", className="text-muted text-center mb-2 small"),
+                                                            html.P(id="group-hint", children=texts["drag_field_here"], className="text-muted text-center mb-2 small"),
                                                             html.Div(
                                                                 id="drop-group",
                                                                 children=[
                                                                     html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
-                                                                    "min-height": "60px",
-                                                                    "margin-bottom": "15px",
+                                                                    "minHeight": "60px",
+                                                                    "marginBottom": "15px",
                                                                     "border": "2px dashed #ced4da",
                                                                     "borderRadius": "6px",
                                                                     "padding": "0.5rem"
@@ -171,12 +173,12 @@ def create_chart_designer_page():
                                                 html.Div(id="chart-config-table", children=[
                                                     html.Div(
                                                         [
-                                                            html.Label("展示方向", className="form-label fw-bold mb-2"),
+                                                            html.Label(texts["display_orientation"], className="form-label fw-bold mb-2"),
                                                             dbc.RadioItems(
                                                                 id="table-orientation",
                                                                 options=[
-                                                                    {"label": "横向展示（字段为列）", "value": "horizontal"},
-                                                                    {"label": "纵向展示（字段为行）", "value": "vertical"},
+                                                                    {"label": texts["horizontal_display"], "value": "horizontal"},
+                                                                    {"label": texts["vertical_display"], "value": "vertical"},
                                                                 ],
                                                                 value="horizontal",
                                                                 inline=False,
@@ -185,18 +187,18 @@ def create_chart_designer_page():
                                                         className="mb-3"
                                                     ),
                                                     html.Div(id="table-columns-config", children=[
-                                                        html.Label("表格列配置", className="form-label fw-bold mb-2"),
-                                                        html.P("拖拽字段到下方列区域以设置表格列", className="text-muted small mb-2"),
+                                                        html.Label(texts["table_columns_config"], className="form-label fw-bold mb-2"),
+                                                        html.P(texts["drag_field_to_columns"], className="text-muted small mb-2"),
                                                         html.Div(id="table-columns-list", children=[
-                                                            html.P("拖拽字段到此处作为第1列", className="text-muted text-center mb-2 small"),
+                                                            html.P(texts["drag_field_as_column"].format(1), className="text-muted text-center mb-2 small"),
                                                             html.Div(
                                                                 id="drop-table-col-1",
                                                                 children=[
                                                                     html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
-                                                                    "min-height": "50px",
-                                                                    "margin-bottom": "10px",
+                                                                    "minHeight": "50px",
+                                                                    "marginBottom": "10px",
                                                                     "border": "2px dashed #ced4da",
                                                                     "borderRadius": "6px",
                                                                     "padding": "0.5rem"
@@ -204,21 +206,21 @@ def create_chart_designer_page():
                                                                 className="drop-zone",
                                                             ),
                                                         ]),
-                                                        dbc.Button("添加列", id="btn-add-table-column", color="link", size="sm", className="p-0 mt-2"),
+                                                        dbc.Button(texts["add_column"], id="btn-add-table-column", color="link", size="sm", className="p-0 mt-2"),
                                                     ]),
                                                     html.Div(id="table-rows-config", style={"display": "none"}, children=[
-                                                        html.Label("表格行配置", className="form-label fw-bold mb-2"),
-                                                        html.P("拖拽字段到下方行区域以设置表格行", className="text-muted small mb-2"),
+                                                        html.Label(texts["table_rows_config"], className="form-label fw-bold mb-2"),
+                                                        html.P(texts["drag_field_to_rows"], className="text-muted small mb-2"),
                                                         html.Div(id="table-rows-list", children=[
-                                                            html.P("拖拽字段到此处作为第1行", className="text-muted text-center mb-2 small"),
+                                                            html.P(texts["drag_field_as_row"].format(1), className="text-muted text-center mb-2 small"),
                                                             html.Div(
                                                                 id="drop-table-row-1",
                                                                 children=[
                                                                     html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
-                                                                    "min-height": "50px",
-                                                                    "margin-bottom": "10px",
+                                                                    "minHeight": "50px",
+                                                                    "marginBottom": "10px",
                                                                     "border": "2px dashed #ced4da",
                                                                     "borderRadius": "6px",
                                                                     "padding": "0.5rem"
@@ -226,7 +228,7 @@ def create_chart_designer_page():
                                                                 className="drop-zone",
                                                             ),
                                                         ]),
-                                                        dbc.Button("添加行", id="btn-add-table-row", color="link", size="sm", className="p-0 mt-2"),
+                                                        dbc.Button(texts["add_row"], id="btn-add-table-row", color="link", size="sm", className="p-0 mt-2"),
                                                     ]),
                                                 ]),
                                             ]
@@ -240,28 +242,28 @@ def create_chart_designer_page():
                             html.Div(id="agg-function-card", children=[
                                 dbc.Card(
                                     [
-                                        dbc.CardHeader("聚合函数配置"),
+                                        dbc.CardHeader(texts["aggregation_function_config"], id="agg-function-header"),
                                         dbc.CardBody(
                                             [
                                                 html.Div([
-                                                    html.Label("默认聚合函数（所有Y轴字段）", className="form-label mb-2"),
+                                                    html.Label(texts["default_aggregation_function"], className="form-label mb-2"),
                                                     dbc.Select(
                                                         id="agg-function",
                                                         options=[
-                                                            {"label": "求和 (SUM)", "value": "sum"},
-                                                            {"label": "平均值 (AVG)", "value": "avg"},
-                                                            {"label": "计数 (COUNT)", "value": "count"},
-                                                            {"label": "最大值 (MAX)", "value": "max"},
-                                                            {"label": "最小值 (MIN)", "value": "min"},
-                                                            {"label": "占比 (Percentage)", "value": "percentage"},
+                                                            {"label": texts["sum"], "value": "sum"},
+                                                            {"label": texts["avg"], "value": "avg"},
+                                                            {"label": texts["count"], "value": "count"},
+                                                            {"label": texts["max"], "value": "max"},
+                                                            {"label": texts["min"], "value": "min"},
+                                                            {"label": texts["percentage"], "value": "percentage"},
                                                         ],
                                                         value="sum",
                                                         className="mb-3",
                                                     ),
                                                 ]),
                                                 html.Div(id="field-agg-functions", children=[
-                                                    html.Label("各字段聚合函数（可选）", className="form-label mb-2"),
-                                                    html.P("可以为每个Y轴字段单独设置聚合函数。如果不设置，将使用默认聚合函数。", 
+                                                    html.Label(texts["field_aggregation_function"], className="form-label mb-2"),
+                                                    html.P(texts["field_aggregation_hint"], 
                                                           className="text-muted small mb-2"),
                                                 ]),
                                             ]
@@ -274,20 +276,20 @@ def create_chart_designer_page():
                             # 样式配置
                             dbc.Card(
                                 [
-                                    dbc.CardHeader("样式配置"),
+                                    dbc.CardHeader(texts["style_config"], id="style-config-header"),
                                     dbc.CardBody(
                                         [
-                                            html.Label("图表标题", className="form-label"),
-                                            dbc.Input(id="chart-title", placeholder="请输入图表标题", type="text", className="mb-3"),
-                                            html.Label("颜色主题", className="form-label"),
+                                            html.Label(texts["chart_title"], className="form-label"),
+                                            dbc.Input(id="chart-title", placeholder=texts["enter_chart_title"], type="text", className="mb-3"),
+                                            html.Label(texts["color_theme"], className="form-label"),
                                             dbc.Select(
                                                 id="color-theme",
                                                 options=[
-                                                    {"label": "默认", "value": "default"},
-                                                    {"label": "商务蓝", "value": "blue"},
-                                                    {"label": "活力橙", "value": "orange"},
-                                                    {"label": "自然绿", "value": "green"},
-                                                    {"label": "优雅紫", "value": "purple"},
+                                                    {"label": texts["default"], "value": "default"},
+                                                    {"label": texts["business_blue"], "value": "blue"},
+                                                    {"label": texts["vibrant_orange"], "value": "orange"},
+                                                    {"label": texts["natural_green"], "value": "green"},
+                                                    {"label": texts["purple"], "value": "purple"},
                                                 ],
                                                 value="default",
                                                 className="mb-3",
@@ -295,16 +297,16 @@ def create_chart_designer_page():
                                             # 自定义颜色配置
                                             html.Div(id="custom-colors-section", children=[
                                                 html.Hr(className="my-3"),
-                                                html.Label("自定义颜色（每个分组使用不同颜色）", className="form-label fw-bold"),
-                                                html.P("当有分组字段时，可以为每个分组设置自定义颜色。颜色将自动确保不重复。", className="text-muted small mb-3"),
+                                                html.Label(texts["custom_color_config"], className="form-label fw-bold"),
+                                                html.P(texts["custom_color_hint"], className="text-muted small mb-3"),
                                                 html.Div(id="custom-colors-list", children=[
-                                                    html.P("请先设置分组字段", className="text-muted text-center py-3"),
+                                                    html.P(texts["set_group_field_first"], className="text-muted text-center py-3"),
                                                 ]),
                                             ], style={"display": "none"}),
                                             dbc.Checklist(
                                                 options=[
-                                                    {"label": "显示数据标签", "value": "show-labels"},
-                                                    {"label": "显示图例", "value": "show-legend"},
+                                                    {"label": texts["show_labels"], "value": "show-labels"},
+                                                    {"label": texts["show_legend"], "value": "show-legend"},
                                                 ],
                                                 value=["show-legend"],
                                                 id="chart-options",
@@ -324,18 +326,18 @@ def create_chart_designer_page():
                                 [
                                     dbc.CardHeader(
                                         [
-                                            html.Span("已保存图表", className="me-auto"),
+                                            html.Span(texts["saved_charts"], id="saved-charts-header", className="me-auto"),
                                             dbc.ButtonGroup(
                                                 [
                                                     dbc.Button(
-                                                        [html.I(className="fas fa-plus me-1"), "新增"],
+                                                        [html.I(className="fas fa-plus me-1"), texts["add"]],
                                                         id="btn-new-chart",
                                                         color="success",
                                                         size="sm",
                                                         outline=True
                                                     ),
                                                     dbc.Button(
-                                                        [html.I(className="fas fa-sync me-1"), "刷新"],
+                                                        [html.I(className="fas fa-sync me-1"), texts["refresh"]],
                                                         id="btn-refresh-saved-charts",
                                                         color="link",
                                                         size="sm",
@@ -350,13 +352,13 @@ def create_chart_designer_page():
                                     dbc.CardBody(
                                         [
                                             html.Div(id="saved-charts-list", children=[
-                                                html.P("加载中...", className="text-muted text-center py-3"),
+                                                html.P(texts["loading"], className="text-muted text-center py-3"),
                                             ]),
                                         ]
                                     ),
                                 ],
                                 className="mb-3",
-                                style={"max-height": "600px", "overflow-y": "auto"},
+                                style={"maxHeight": "600px", "overflowY": "auto"},
                             ),
                         ],
                         width=3,
@@ -369,11 +371,11 @@ def create_chart_designer_page():
                                 [
                                     dbc.CardHeader(
                                         [
-                                            html.Span("图表预览", className="me-auto"),
+                                            html.Span(texts["chart_preview"], id="chart-preview-header", className="me-auto"),
                                             dbc.ButtonGroup(
                                                 [
-                                                    dbc.Button("保存图表", id="btn-save-chart", color="success", size="sm"),
-                                                    dbc.Button("导出图片", id="btn-export-chart-image", color="info", size="sm"),
+                                                    dbc.Button(texts["save_chart"], id="btn-save-chart", color="success", size="sm"),
+                                                    dbc.Button(texts["export_image"], id="btn-export-chart-image", color="info", size="sm"),
                                                 ],
                                                 className="float-end",
                                             ),
@@ -387,7 +389,7 @@ def create_chart_designer_page():
                                             dcc.Store(id="editing-chart-id", data=None),
                                             html.Div(id="chart-save-status", children=[], className="mb-2"),
                                             html.Div(id="chart-preview", children=[
-                                                html.P("请选择数据源并配置字段以生成预览", className="text-muted text-center py-5"),
+                                                html.P(texts["select_datasource_and_config"], id="preview-hint", className="text-muted text-center py-5"),
                                             ]),
                                         ]
                                     ),
@@ -406,21 +408,22 @@ def create_chart_designer_page():
 
 def _generate_chart_cards(charts):
     """生成图表卡片列表的辅助函数"""
+    texts = language_manager.get_all_texts()
     if not charts:
-        return html.P("暂无已保存的图表", className="text-muted text-center py-3")
+        return html.P(texts["no_saved_charts"], className="text-muted text-center py-3")
     
     chart_cards = []
     chart_type_names = {
-        'line': '折线图',
-        'bar': '柱状图',
-        'pie': '饼图',
-        'table': '表格',
-        'combo': '组合图'
+        'line': texts['line_chart'],
+        'bar': texts['bar_chart'],
+        'pie': texts['pie_chart'],
+        'table': texts['table'],
+        'combo': texts['combo_chart']
     }
     
     for chart in charts:
         chart_id_item = chart.get('id')
-        chart_name_item = chart.get('name', chart.get('title', '未命名图表'))
+        chart_name_item = chart.get('name', chart.get('title', texts['unnamed_chart']))
         chart_type_item = chart.get('type', 'line')
         chart_type_name = chart_type_names.get(chart_type_item, chart_type_item)
         created_at = chart.get('created_at', '')
@@ -430,9 +433,9 @@ def _generate_chart_cards(charts):
                 created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                 created_str = created_dt.strftime('%Y-%m-%d %H:%M')
             else:
-                created_str = '未知'
+                created_str = texts['unknown']
         except:
-            created_str = created_at[:16] if created_at else '未知'
+            created_str = created_at[:16] if created_at else texts['unknown']
         
         chart_card = dbc.Card(
             [
@@ -441,22 +444,22 @@ def _generate_chart_cards(charts):
                         html.Div(
                             [
                                 html.H6(chart_name_item, className="mb-1 fw-bold"),
-                                html.P(f"类型: {chart_type_name}", className="mb-1 small text-muted"),
-                                html.P(f"创建: {created_str}", className="mb-2 small text-muted"),
+                                html.P(texts["chart_type_colon"].format(chart_type_name), className="mb-1 small text-muted"),
+                                html.P(texts["created_colon"].format(created_str), className="mb-2 small text-muted"),
                             ],
                             className="mb-2"
                         ),
                         dbc.ButtonGroup(
                             [
                                 dbc.Button(
-                                    [html.I(className="fas fa-edit me-1"), "编辑"],
+                                    [html.I(className="fas fa-edit me-1"), texts["edit"]],
                                     id={"type": "edit-saved-chart", "chart_id": chart_id_item},
                                     color="primary",
                                     size="sm",
                                     className="flex-fill"
                                 ),
                                 dbc.Button(
-                                    [html.I(className="fas fa-trash me-1"), "删除"],
+                                    [html.I(className="fas fa-trash me-1"), texts["delete"]],
                                     id={"type": "delete-saved-chart", "chart_id": chart_id_item},
                                     color="danger",
                                     size="sm",
@@ -500,7 +503,8 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             # 初始加载时不自动选择数据源，显示空图表
             selected = None
             if not options:
-                options = [{"label": "请先添加数据源", "value": None, "disabled": True}]
+                texts = language_manager.get_all_texts()
+                options = [{"label": texts["please_add_datasource_first"], "value": None, "disabled": True}]
             return options, selected
         return [], None
 
@@ -599,7 +603,8 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             chart_config = config_manager.get_chart(chart_id)
             if not chart_config:
                 no_updates = [dash.no_update] * 11
-                no_updates.append(dbc.Alert("图表不存在", color="danger", className="m-2"))
+                texts = language_manager.get_all_texts()
+                no_updates.append(dbc.Alert(texts["chart_not_found"], color="danger", className="m-2"))
                 return tuple(no_updates)
             
             assignments = default_chart_assignments()
@@ -621,6 +626,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             if chart_config.get('show_legend', True):
                 options.append('show-legend')
             
+            texts = language_manager.get_all_texts()
             return (
                 chart_id,
                 chart_config.get('datasource_id'),
@@ -633,11 +639,12 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 options,
                 chart_config.get('custom_colors', {}),
                 table_orientation,
-                dbc.Alert("图表配置已加载，可以开始编辑", color="success", className="m-2")
+                dbc.Alert(texts["chart_config_loaded"], color="success", className="m-2")
             )
         except Exception as e:
             no_updates = [dash.no_update] * 11
-            no_updates.append(dbc.Alert(f"加载图表失败：{str(e)}", color="danger", className="m-2"))
+            texts = language_manager.get_all_texts()
+            no_updates.append(dbc.Alert(texts["load_chart_failed"].format(str(e)), color="danger", className="m-2"))
             return tuple(no_updates)
         
         return [dash.no_update] * 12
@@ -690,11 +697,13 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     charts = config_manager.load_charts()
                     charts_list = _generate_chart_cards(charts)
                     
-                    return charts_list, dbc.Alert(f"图表 '{chart_name}' 已删除", color="success", className="m-2")
+                    texts = language_manager.get_all_texts()
+                    return charts_list, dbc.Alert(texts["chart_deleted"].format(chart_name), color="success", className="m-2")
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return dash.no_update, dbc.Alert(f"删除失败：{str(e)}", color="danger", className="m-2")
+            texts = language_manager.get_all_texts()
+            return dash.no_update, dbc.Alert(texts["delete_failed"].format(str(e)), color="danger", className="m-2")
         
         return dash.no_update, dash.no_update
 
@@ -712,12 +721,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         try:
             ds_config = config_manager.get_datasource(datasource_id)
             if not ds_config:
-                return html.P("数据源不存在", className="text-danger mb-0"), assignments
+                texts = language_manager.get_all_texts()
+                return html.P(texts["datasource_not_found"], className="text-danger mb-0"), assignments
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             schema = adapter.get_schema()
             columns = schema.get('columns', []) if isinstance(schema, dict) else []
             if not columns:
-                return html.P("未检测到字段，请检查数据源配置", className="text-muted mb-0"), assignments
+                texts = language_manager.get_all_texts()
+                return html.P(texts["no_fields_detected"], className="text-muted mb-0"), assignments
             type_labels = {
                 'date': '日期',
                 'datetime64[ns]': '日期',
@@ -748,10 +759,12 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 )
                 badges.append(badge)
             if not badges:
-                return html.P("未检测到字段，请检查数据源", className="text-muted mb-0"), assignments
+                texts = language_manager.get_all_texts()
+                return html.P(texts["no_fields_detected_simple"], className="text-muted mb-0"), assignments
             return html.Div(badges, className="d-flex flex-wrap"), assignments
         except Exception as exc:
-            return dbc.Alert(f"加载字段失败：{exc}", color="danger"), assignments
+            texts = language_manager.get_all_texts()
+            return dbc.Alert(texts["load_fields_failed"].format(str(exc)), color="danger"), assignments
 
     @app.callback(
         [Output("chart-config-normal", "style"),
@@ -828,10 +841,11 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         if chart_type == "table":
             return dash.no_update, dash.no_update, dash.no_update
         assignments = assignments or default_chart_assignments()
+        texts = language_manager.get_all_texts()
         return (
-            render_assigned_fields(assignments.get('x'), "拖拽字段到此处"),
-            render_assigned_fields(assignments.get('y'), "拖拽字段到此处", multiple=True),
-            render_assigned_fields(assignments.get('group'), "拖拽字段到此处"),
+            render_assigned_fields(assignments.get('x'), texts["drag_field_here"]),
+            render_assigned_fields(assignments.get('y'), texts["drag_field_here"], multiple=True),
+            render_assigned_fields(assignments.get('group'), texts["drag_field_here"]),
         )
 
     @app.callback(
@@ -849,21 +863,25 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         group_field = assignments.get('group')
         
         if not group_field or chart_type == "table":
-            return {"display": "none"}, html.P("请先设置分组字段", className="text-muted text-center py-3")
+            texts = language_manager.get_all_texts()
+            return {"display": "none"}, html.P(texts["set_group_field_first"], className="text-muted text-center py-3")
         
         if not datasource_id:
-            return {"display": "none"}, html.P("请先选择数据源", className="text-muted text-center py-3")
+            texts = language_manager.get_all_texts()
+            return {"display": "none"}, html.P(texts["select_datasource_first"], className="text-muted text-center py-3")
         
         try:
             ds_config = config_manager.get_datasource(datasource_id)
             if not ds_config:
-                return {"display": "none"}, html.P("数据源不存在", className="text-muted text-center py-3")
+                texts = language_manager.get_all_texts()
+                return {"display": "none"}, html.P(texts["datasource_not_found"], className="text-muted text-center py-3")
             
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             
             if df is None or df.empty or group_field not in df.columns:
-                return {"display": "none"}, html.P("无法加载分组数据", className="text-muted text-center py-3")
+                texts = language_manager.get_all_texts()
+                return {"display": "none"}, html.P(texts["cannot_load_group_data"], className="text-muted text-center py-3")
             
             unique_groups = sorted(df[group_field].dropna().unique().tolist())
             custom_colors = custom_colors or {}
@@ -907,7 +925,8 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             return {"display": "block"}, html.Div(color_inputs)
         
         except Exception as e:
-            return {"display": "none"}, html.P(f"加载分组数据失败：{str(e)}", className="text-danger text-center py-3")
+                texts = language_manager.get_all_texts()
+                return {"display": "none"}, html.P(texts["load_group_data_failed"].format(str(e)), className="text-danger text-center py-3")
 
     @app.callback(
         [Output("custom-colors-config", "data", allow_duplicate=True),
@@ -1067,17 +1086,18 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         table_rows = assignments.get('table_rows', [])
         
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        texts = language_manager.get_all_texts()
         
         if trigger_id == "btn-add-table-column":
             new_col_index = len(table_columns) + 1
             col_div = html.Div([
-                html.P(f"拖拽字段到此处作为第{new_col_index}列", className="text-muted text-center mb-2 small"),
+                html.P(texts["drag_field_as_column_n"].format(new_col_index), className="text-muted text-center mb-2 small"),
                 html.Div(
                     id={"type": "drop-table-col", "index": new_col_index},
                     children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
                     style={
-                        "min-height": "50px",
-                        "margin-bottom": "10px",
+                        "minHeight": "50px",
+                        "marginBottom": "10px",
                         "border": "2px dashed #ced4da",
                         "borderRadius": "6px",
                         "padding": "0.5rem"
@@ -1093,13 +1113,13 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         elif trigger_id == "btn-add-table-row":
             new_row_index = len(table_rows) + 1
             row_div = html.Div([
-                html.P(f"拖拽字段到此处作为第{new_row_index}行", className="text-muted text-center mb-2 small"),
+                html.P(texts["drag_field_as_row_n"].format(new_row_index), className="text-muted text-center mb-2 small"),
                 html.Div(
                     id={"type": "drop-table-row", "index": new_row_index},
                     children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
                     style={
-                        "min-height": "50px",
-                        "margin-bottom": "10px",
+                        "minHeight": "50px",
+                        "marginBottom": "10px",
                         "border": "2px dashed #ced4da",
                         "borderRadius": "6px",
                         "padding": "0.5rem"
@@ -1113,13 +1133,13 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         cols_list = []
         for i, col in enumerate(table_columns):
             cols_list.append(html.Div([
-                html.P(f"第{i+1}列: {col}", className="text-muted text-center mb-2 small"),
+                html.P(texts["column_n"].format(i+1, col), className="text-muted text-center mb-2 small"),
                 html.Div(
                     id=f"drop-table-col-{i+1}",
                     children=[dbc.Badge(col, color="secondary", pill=True)],
                     style={
-                        "min-height": "50px",
-                        "margin-bottom": "10px",
+                        "minHeight": "50px",
+                        "marginBottom": "10px",
                         "border": "2px dashed #ced4da",
                         "borderRadius": "6px",
                         "padding": "0.5rem"
@@ -1128,13 +1148,13 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 ),
             ]))
         cols_list.append(html.Div([
-            html.P(f"拖拽字段到此处作为第{len(table_columns)+1}列", className="text-muted text-center mb-2 small"),
+            html.P(texts["drag_field_as_column_n"].format(len(table_columns)+1), className="text-muted text-center mb-2 small"),
             html.Div(
                 id=f"drop-table-col-{len(table_columns)+1}",
                 children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
                 style={
-                    "min-height": "50px",
-                    "margin-bottom": "10px",
+                    "minHeight": "50px",
+                    "marginBottom": "10px",
                     "border": "2px dashed #ced4da",
                     "borderRadius": "6px",
                     "padding": "0.5rem"
@@ -1143,16 +1163,17 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             ),
         ]))
         
+        texts = language_manager.get_all_texts()
         rows_list = []
         for i, row in enumerate(table_rows):
             rows_list.append(html.Div([
-                html.P(f"第{i+1}行: {row}", className="text-muted text-center mb-2 small"),
+                html.P(texts["row_n"].format(i+1, row), className="text-muted text-center mb-2 small"),
                 html.Div(
                     id=f"drop-table-row-{i+1}",
                     children=[dbc.Badge(row, color="secondary", pill=True)],
                     style={
-                        "min-height": "50px",
-                        "margin-bottom": "10px",
+                        "minHeight": "50px",
+                        "marginBottom": "10px",
                         "border": "2px dashed #ced4da",
                         "borderRadius": "6px",
                         "padding": "0.5rem"
@@ -1161,13 +1182,13 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 ),
             ]))
         rows_list.append(html.Div([
-            html.P(f"拖拽字段到此处作为第{len(table_rows)+1}行", className="text-muted text-center mb-2 small"),
+            html.P(texts["drag_field_as_row_n"].format(len(table_rows)+1), className="text-muted text-center mb-2 small"),
             html.Div(
                 id=f"drop-table-row-{len(table_rows)+1}",
                 children=[html.P("拖拽字段到此处", className="text-muted text-center mb-0")],
                 style={
-                    "min-height": "50px",
-                    "margin-bottom": "10px",
+                    "minHeight": "50px",
+                    "marginBottom": "10px",
                     "border": "2px dashed #ced4da",
                     "borderRadius": "6px",
                     "padding": "0.5rem"
@@ -1261,12 +1282,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             if not datasource_id:
                 return html.P("请选择数据源", className="text-muted text-center py-5")
             ds_config = config_manager.get_datasource(datasource_id)
+            texts = language_manager.get_all_texts()
             if not ds_config:
-                return html.P("数据源不存在", className="text-muted text-center py-5")
+                return html.P(texts["datasource_not_found"], className="text-muted text-center py-5")
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             if df is None or df.empty:
-                return html.P("数据为空，无法生成图表", className="text-muted text-center py-5")
+                texts = language_manager.get_all_texts()
+                return html.P(texts["data_empty_cannot_generate"], className="text-muted text-center py-5")
             assignments = assignments or default_chart_assignments()
             options = options or []
             
@@ -1371,12 +1394,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2"), dash.no_update, dash.no_update
         try:
             ds_config = config_manager.get_datasource(datasource_id)
+            texts = language_manager.get_all_texts()
             if not ds_config:
-                return dash.no_update, dbc.Alert("数据源不存在", color="warning", className="m-2"), dash.no_update, dash.no_update
+                return dash.no_update, dbc.Alert(texts["datasource_not_found"], color="warning", className="m-2"), dash.no_update, dash.no_update
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             if df is None or df.empty:
-                return dash.no_update, dbc.Alert("数据为空", color="warning", className="m-2"), dash.no_update, dash.no_update
+                texts = language_manager.get_all_texts()
+                return dash.no_update, dbc.Alert(texts["data_empty"], color="warning", className="m-2"), dash.no_update, dash.no_update
             assignments = assignments or default_chart_assignments()
             x_field = assignments.get('x')
             y_fields = assignments.get('y') or []
@@ -1495,12 +1520,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         
         try:
             ds_config = config_manager.get_datasource(datasource_id)
+            texts = language_manager.get_all_texts()
             if not ds_config:
-                return dbc.Alert("数据源不存在", color="warning", className="m-2")
+                return dbc.Alert(texts["datasource_not_found"], color="warning", className="m-2")
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             if df is None or df.empty:
-                return dbc.Alert("数据为空", color="warning", className="m-2")
+                texts = language_manager.get_all_texts()
+                return dbc.Alert(texts["data_empty"], color="warning", className="m-2")
             assignments = assignments or default_chart_assignments()
             x_field = assignments.get('x')
             y_fields = assignments.get('y') or []

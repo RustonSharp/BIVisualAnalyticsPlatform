@@ -1,4 +1,5 @@
 """仪表盘页面模块"""
+from language_manager import language_manager
 import dash
 from dash import dcc, html, Input, Output, State, ALL, callback_context
 import dash_bootstrap_components as dbc
@@ -102,7 +103,9 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
     
     if not date_field:
         # 没有找到日期字段，返回原DataFrame和提示信息
-        return df, "未找到日期字段，无法应用时间筛选"
+        from language_manager import language_manager
+        texts = language_manager.get_all_texts()
+        return df, texts["no_date_field_found"]
     
     # 确保日期字段是datetime类型
     try:
@@ -110,7 +113,9 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             # 尝试转换为datetime类型
             df[date_field] = pd.to_datetime(df[date_field], errors='coerce')
     except Exception as e:
-        return df, f"日期字段转换失败: {str(e)}"
+        from language_manager import language_manager
+        texts = language_manager.get_all_texts()
+        return df, texts["date_field_conversion_failed"].format(str(e))
     
     # 计算时间范围
     now = pd.Timestamp.now()
@@ -124,7 +129,9 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
                 end_ts = pd.Timestamp(end_date)
                 # 检查是否为NaT
                 if pd.isna(start_ts) or pd.isna(end_ts):  # type: ignore[arg-type]
-                    return df, "日期格式错误: 无法解析日期"
+                    from language_manager import language_manager
+                    texts = language_manager.get_all_texts()
+                    return df, texts["date_format_error_parse"]
                 start = cast(pd.Timestamp, start_ts)
                 end = cast(pd.Timestamp, end_ts)
                 # 确保end包含整天
@@ -133,13 +140,19 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
                     delta1 = pd.Timedelta(days=1)
                     delta2 = pd.Timedelta(seconds=1)
                     if pd.isna(delta1) or pd.isna(delta2):  # type: ignore[arg-type]
-                        return df, "日期格式错误: 无法创建时间差"
+                        from language_manager import language_manager
+                        texts = language_manager.get_all_texts()
+                        return df, texts["date_format_error_timedelta"]
                     delta = delta1 - delta2  # type: ignore[operator]
                     end = cast(pd.Timestamp, end + delta)  # type: ignore[operator]
             except (ValueError, TypeError) as e:
-                return df, f"日期格式错误: {str(e)}"
+                from language_manager import language_manager
+                texts = language_manager.get_all_texts()
+                return df, texts["date_format_error"].format(str(e))
         else:
-            return df, "自定义时间范围需要指定起始和结束日期"
+            from language_manager import language_manager
+            texts = language_manager.get_all_texts()
+            return df, texts["custom_range_needs_dates"]
     elif time_filter == "today":
         start = now.normalize()
         end = now
@@ -159,7 +172,9 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             # 移除日期字段中的NaT值（无效日期）
             df_valid = df[df[date_field].notna()].copy()
             if len(df_valid) == 0:
-                return df, "日期字段中无有效日期数据"
+                from language_manager import language_manager
+                texts = language_manager.get_all_texts()
+                return df, texts["no_valid_date_data"]
             
             # 应用时间筛选
             mask = (df_valid[date_field] >= start) & (df_valid[date_field] <= end)
@@ -169,13 +184,16 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             df_result = cast(pd.DataFrame, df_filtered)
             return df_result, date_field
         except Exception as e:
-            return df, f"时间筛选失败: {str(e)}"
+            from language_manager import language_manager
+            texts = language_manager.get_all_texts()
+            return df, texts["time_filter_failed"].format(str(e))
     
     return df, None
 
 
 def create_dashboard_page():
     """创建仪表盘页面"""
+    texts = language_manager.get_all_texts()
     return dbc.Container(
         [
             # Store组件：存储当前选中的仪表盘ID和仪表盘配置
@@ -199,10 +217,10 @@ def create_dashboard_page():
                     dbc.Col(
                         [
                             html.Div([
-                                html.H2(id="dashboard-title", children="我的仪表盘", className="mb-0 d-inline-block me-3"),
+                                html.H2(id="dashboard-title", children=texts["my_dashboard"], className="mb-0 d-inline-block me-3"),
                                 dbc.Select(
                                     id="dashboard-selector",
-                                    placeholder="选择或创建仪表盘...",
+                                    placeholder=texts["select_or_create_dashboard"],
                                     className="d-inline-block",
                                     style={"width": "300px", "verticalAlign": "middle"},
                                 ),
@@ -214,13 +232,13 @@ def create_dashboard_page():
                         [
                             dbc.ButtonGroup(
                                 [
-                                    dbc.Button([html.I(className="fas fa-plus me-1"), "新建仪表盘"], 
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), texts["new_dashboard"]], 
                                               id="btn-new-dashboard", color="primary", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-edit me-1"), "编辑"], 
+                                    dbc.Button([html.I(className="fas fa-edit me-1"), texts["edit"]], 
                                               id="btn-edit-dashboard", color="secondary", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-trash me-1"), "删除"], 
+                                    dbc.Button([html.I(className="fas fa-trash me-1"), texts["delete"]], 
                                               id="btn-delete-dashboard", color="danger", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), texts["add_chart"]], 
                                               id="btn-add-chart-to-dashboard", color="success", size="sm"),
                                 ],
                             ),
@@ -237,7 +255,7 @@ def create_dashboard_page():
                             dbc.ButtonGroup(
                                 [
                                     dbc.Button(
-                                        [html.I(className="fas fa-filter me-1"), "筛选模式"],
+                                        [html.I(className="fas fa-filter me-1"), texts["filter_mode"]],
                                         id="btn-interaction-mode-filter",
                                         color="primary",
                                         size="sm",
@@ -245,7 +263,7 @@ def create_dashboard_page():
                                         className="interaction-mode-btn"
                                     ),
                                     dbc.Button(
-                                        [html.I(className="fas fa-search me-1"), "下钻模式"],
+                                        [html.I(className="fas fa-search me-1"), texts["drill_down_mode"]],
                                         id="btn-interaction-mode-drill-down",
                                         color="secondary",
                                         size="sm",
@@ -256,7 +274,7 @@ def create_dashboard_page():
                             ),
                             html.Small(
                                 id="interaction-mode-hint",
-                                children="当前模式：筛选模式 - 左键点击图表数据点可筛选其他图表",
+                                children=texts["current_mode_filter"],
                                 className="text-muted d-block mt-2"
                             ),
                         ],
@@ -306,26 +324,26 @@ def create_dashboard_page():
                                     dbc.CardBody(
                                         [
                                             html.Div([
-                                                html.Label("时间范围", className="form-label d-inline-block me-3"),
+                                                html.Label(texts["time_filter"], id="time-filter-label", className="form-label d-inline-block me-3"),
                                                 html.Div(id="chart-filter-status", className="d-inline-block me-3"),
                                             ], className="mb-2"),
                                             dbc.RadioItems(
                                                 id="time-filter",
                                                 options=[
-                                                    {"label": "全部", "value": "all"},
-                                                    {"label": "今天", "value": "today"},
-                                                    {"label": "近7天", "value": "7days"},
-                                                    {"label": "近30天", "value": "30days"},
-                                                    {"label": "本月", "value": "month"},
-                                                    {"label": "自定义", "value": "custom"},
+                                                    {"label": texts["all"], "value": "all"},
+                                                    {"label": texts["today"], "value": "today"},
+                                                    {"label": texts["last_7_days"], "value": "7days"},
+                                                    {"label": texts["last_30_days"], "value": "30days"},
+                                                    {"label": texts["this_month"], "value": "month"},
+                                                    {"label": texts["custom_range"], "value": "custom"},
                                                 ],
                                                 value="all",
                                                 inline=True,
                                             ),
                                             html.Div(id="custom-date-range", style={"display": "none"}, children=[
-                                                html.Label("起始日期", className="form-label mt-2"),
+                                                html.Label(texts["start_date"], id="start-date-label", className="form-label mt-2"),
                                                 dcc.DatePickerSingle(id="start-date", className="mb-2"),
-                                                html.Label("结束日期", className="form-label"),
+                                                html.Label(texts["end_date"], id="end-date-label", className="form-label"),
                                                 dcc.DatePickerSingle(id="end-date"),
                                             ]),
                                         ]
@@ -341,25 +359,25 @@ def create_dashboard_page():
             
             # 仪表盘图表区域
             html.Div(id="dashboard-charts-container", children=[
-                html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"),
+                html.P(texts["please_select_or_create_dashboard"], id="dashboard-empty-hint", className="text-muted text-center py-5"),
             ]),
             
             # 新建/编辑仪表盘模态框
             dbc.Modal(
                 [
-                    dbc.ModalHeader(id="dashboard-modal-header", children="新建仪表盘"),
+                    dbc.ModalHeader(id="dashboard-modal-header", children=texts["new_dashboard"]),
                     dbc.ModalBody(
                         [
-                            html.Label("仪表盘名称", className="form-label"),
-                            dbc.Input(id="dashboard-name-input", placeholder="请输入仪表盘名称", className="mb-3"),
-                            html.Label("描述", className="form-label"),
-                            dbc.Textarea(id="dashboard-description-input", placeholder="请输入描述（可选）", rows=3),
+                            html.Label(texts["dashboard_name"], id="dashboard-name-label", className="form-label"),
+                            dbc.Input(id="dashboard-name-input", placeholder=texts["enter_dashboard_name"], className="mb-3"),
+                            html.Label(texts["dashboard_description"], id="dashboard-description-label", className="form-label"),
+                            dbc.Textarea(id="dashboard-description-input", placeholder=texts["enter_description_optional"], rows=3),
                         ]
                     ),
                     dbc.ModalFooter(
                         [
-                            dbc.Button("取消", id="btn-cancel-dashboard-modal", color="secondary", className="me-2"),
-                            dbc.Button("保存", id="btn-save-dashboard-modal", color="primary"),
+                            dbc.Button(texts["cancel"], id="btn-cancel-dashboard-modal", color="secondary", className="me-2"),
+                            dbc.Button(texts["save"], id="btn-save-dashboard-modal", color="primary"),
                         ]
                     ),
                 ],
@@ -371,18 +389,18 @@ def create_dashboard_page():
             # 添加图表到仪表盘模态框
             dbc.Modal(
                 [
-                    dbc.ModalHeader("添加图表到仪表盘"),
+                    dbc.ModalHeader(texts["add_chart_to_dashboard"], id="add-chart-modal-header"),
                     dbc.ModalBody(
                         [
-                            html.Label("选择图表", className="form-label"),
+                            html.Label(texts["select_chart"], id="select-chart-label", className="form-label"),
                             dbc.Select(id="chart-selector-for-dashboard", className="mb-3"),
                             html.Div(id="dashboard-add-chart-status", children=[]),
                         ]
                     ),
                     dbc.ModalFooter(
                         [
-                            dbc.Button("取消", id="btn-cancel-add-chart", color="secondary", className="me-2"),
-                            dbc.Button("添加", id="btn-confirm-add-chart", color="primary"),
+                            dbc.Button(texts["cancel"], id="btn-cancel-add-chart", color="secondary", className="me-2"),
+                            dbc.Button(texts["add"], id="btn-confirm-add-chart", color="primary"),
                         ]
                     ),
                 ],
@@ -393,15 +411,15 @@ def create_dashboard_page():
             # 分享链接模态框
             dbc.Modal(
                 [
-                    dbc.ModalHeader("分享仪表盘链接"),
+                    dbc.ModalHeader(texts["share_dashboard_link"], id="share-modal-header"),
                     dbc.ModalBody(
                         [
-                            html.P("复制下面的链接分享给其他人，他们可以直接访问此仪表盘：", className="mb-3"),
+                            html.P(texts["copy_link_to_share"], className="mb-3"),
                             dbc.InputGroup(
                                 [
                                     dbc.Input(id="share-link-input", readonly=True, value=""),
                                     dbc.Button(
-                                        [html.I(className="fas fa-copy me-1"), "复制"],
+                                        [html.I(className="fas fa-copy me-1"), texts["copy"]],
                                         id="btn-copy-share-link",
                                         color="primary",
                                         outline=True
@@ -412,13 +430,13 @@ def create_dashboard_page():
                             html.Div(id="share-link-copy-status", children=[]),
                             html.Hr(),
                             html.P([
-                                html.Strong("提示："), " 分享的链接包含当前仪表盘的ID，访问者将看到相同的仪表盘内容。",
+                                html.Strong(texts["tip"] + "："), " " + texts["share_link_tip"],
                             ], className="text-muted small mb-0"),
                         ]
                     ),
                     dbc.ModalFooter(
                         [
-                            dbc.Button("关闭", id="btn-close-share-modal", color="secondary"),
+                            dbc.Button(texts["close"], id="btn-close-share-modal", color="secondary"),
                         ]
                     ),
                 ],
@@ -431,7 +449,7 @@ def create_dashboard_page():
                 [
                     dbc.ModalHeader(
                         [
-                            html.Span("数据下钻详情", className="me-auto"),
+                            html.Span(texts["data_drill_down_details"], className="me-auto"),
                             dbc.Button(
                                 [html.I(className="fas fa-arrow-left me-1"), "返回"],
                                 id="btn-drill-down-back",
@@ -550,7 +568,9 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
     def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status, filter_state, refresh_trigger, data_cache):
         """渲染仪表盘中的图表"""
         if not dashboard_config:
-            return html.P("请选择或创建一个仪表盘", className="text-muted text-center py-5"), dash.no_update
+            from language_manager import language_manager
+            texts = language_manager.get_all_texts()
+            return html.P(texts["please_select_or_create_dashboard"], className="text-muted text-center py-5"), dash.no_update
         
         chart_ids = dashboard_config.get('chart_ids', [])
         if not chart_ids:

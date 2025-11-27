@@ -94,7 +94,7 @@ def create_datasource_page():
                                     dbc.Tab(
                                         [
                                             html.Div([
-                                                html.Label("数据库类型", className="form-label mt-3"),
+                                                html.Label(texts["database_type"], id="db-type-label", className="form-label mt-3"),
                                                 dbc.Select(
                                                     id="db-type",
                                                     options=[
@@ -103,36 +103,36 @@ def create_datasource_page():
                                                     ],
                                                     value="postgresql",
                                                 ),
-                                                html.Label("主机地址", className="form-label mt-3"),
+                                                html.Label(texts["database_host"], id="db-host-label", className="form-label mt-3"),
                                                 dbc.Input(id="db-host", placeholder="localhost", type="text"),
-                                                html.Label("端口", className="form-label mt-3"),
+                                                html.Label(texts["database_port"], id="db-port-label", className="form-label mt-3"),
                                                 dbc.Input(id="db-port", placeholder="5432", type="number"),
-                                                html.Label("数据库名", className="form-label mt-3"),
+                                                html.Label(texts["database_name"], id="db-database-label", className="form-label mt-3"),
                                                 dbc.Input(id="db-database", placeholder="mydb", type="text"),
-                                                html.Label("用户名", className="form-label mt-3"),
+                                                html.Label(texts["database_user"], id="db-user-label", className="form-label mt-3"),
                                                 dbc.Input(id="db-user", placeholder="user", type="text"),
-                                                html.Label("密码", className="form-label mt-3"),
+                                                html.Label(texts["database_password"], id="db-password-label", className="form-label mt-3"),
                                                 dbc.Input(id="db-password", placeholder="password", type="password"),
-                                                html.Label("SQL 查询语句", className="form-label mt-3"),
+                                                html.Label(texts["sql_query"], id="db-sql-label", className="form-label mt-3"),
                                                 dbc.Textarea(
                                                     id="db-sql",
                                                     placeholder="SELECT * FROM your_table LIMIT 100",
                                                     rows=3,
                                                     value="SELECT * FROM table_name LIMIT 100"
                                                 ),
-                                                html.Label("数据源名称", className="form-label mt-3"),
-                                                dbc.Input(id="datasource-name-db", placeholder="例如: 生产数据库", type="text"),
+                                                html.Label(texts["datasource_name"], id="datasource-name-db-label", className="form-label mt-3"),
+                                                dbc.Input(id="datasource-name-db", placeholder=texts["database_name_placeholder"], type="text"),
                                             ]),
                                         ],
-                                        label="数据库 (PostgreSQL/MySQL)",
+                                        label=texts["database_tab_label"],
                                         tab_id="tab-database",
                                     ),
                                     dbc.Tab(
                                         [
                                             html.Div([
-                                                html.Label("API 地址", className="form-label mt-3"),
+                                                html.Label(texts["api_url"], id="api-url-label", className="form-label mt-3"),
                                                 dbc.Input(id="api-url", placeholder="https://api.example.com/data", type="text"),
-                                                html.Label("请求方法", className="form-label mt-3"),
+                                                html.Label(texts["request_method"], id="api-method-label", className="form-label mt-3"),
                                                 dbc.Select(
                                                     id="api-method",
                                                     options=[
@@ -141,15 +141,15 @@ def create_datasource_page():
                                                     ],
                                                     value="GET",
                                                 ),
-                                                html.Label("请求头 (JSON 格式)", className="form-label mt-3"),
+                                                html.Label(texts["api_headers"], id="api-headers-label", className="form-label mt-3"),
                                                 dbc.Textarea(id="api-headers", placeholder='{"Authorization": "Bearer token"}', rows=3),
-                                                html.Label("请求参数 (JSON 格式)", className="form-label mt-3"),
+                                                html.Label(texts["api_params"], id="api-params-label", className="form-label mt-3"),
                                                 dbc.Textarea(id="api-params", placeholder='{"page": 1, "limit": 100}', rows=3),
-                                                html.Label("数据源名称", className="form-label mt-3"),
-                                                dbc.Input(id="datasource-name-api", placeholder="例如: API 数据源", type="text"),
+                                                html.Label(texts["datasource_name"], id="datasource-name-api-label", className="form-label mt-3"),
+                                                dbc.Input(id="datasource-name-api", placeholder=texts["api_name_placeholder"], type="text"),
                                             ]),
                                         ],
-                                        label="REST API",
+                                        label=texts["rest_api"],
                                         tab_id="tab-api",
                                     ),
                                 ],
@@ -160,9 +160,9 @@ def create_datasource_page():
                     ),
                     dbc.ModalFooter(
                         [
-                            dbc.Button("取消", id="btn-cancel-datasource", color="secondary", className="me-2"),
-                            dbc.Button("测试连接", id="btn-test-connection", color="info", className="me-2"),
-                            dbc.Button("保存", id="btn-save-datasource", color="primary"),
+                            dbc.Button(texts["cancel"], id="btn-cancel-datasource", color="secondary", className="me-2"),
+                            dbc.Button(texts["test_connection"], id="btn-test-connection", color="info", className="me-2"),
+                            dbc.Button(texts["save"], id="btn-save-datasource", color="primary"),
                         ]
                     ),
                 ],
@@ -177,11 +177,11 @@ def create_datasource_page():
                     dbc.Col(
                         dbc.Card(
                             [
-                                dbc.CardHeader("数据预览"),
+                                dbc.CardHeader(texts["data_preview"], id="data-preview-header"),
                                 dbc.CardBody(
                                     [
                                         html.Div(id="data-preview", children=[
-                                            html.P("请选择一个数据源查看预览", className="text-muted text-center py-5"),
+                                            html.P(texts["select_datasource_for_preview"], id="preview-hint", className="text-muted text-center py-5"),
                                         ]),
                                     ]
                                 ),
@@ -199,13 +199,14 @@ def create_datasource_page():
 
 def create_datasource_table(datasources):
     """创建数据源列表表格"""
+    texts = language_manager.get_all_texts()
     if not datasources:
-        return html.P("暂无数据源，请点击 '新增数据源' 添加", className="text-muted text-center py-5")
+        return html.P(texts["no_datasource"], className="text-muted text-center py-5")
     
     rows = []
     for ds in datasources:
         status_color = "success" if ds.get('status') == 'connected' else "secondary"
-        status_text = "已连接" if ds.get('status') == 'connected' else "未连接"
+        status_text = texts["connected"] if ds.get('status') == 'connected' else texts["disconnected"]
         ds_type = ds.get('type', 'unknown').upper()
         
         rows.append(
@@ -215,11 +216,11 @@ def create_datasource_table(datasources):
                 html.Td(html.Span(status_text, className=f"badge bg-{status_color}")),
                 html.Td(ds.get('updated_at', 'Unknown')[:19] if ds.get('updated_at') else 'Unknown'),
                 html.Td([
-                    dbc.Button("测试", size="sm", color="secondary", className="me-1", 
+                    dbc.Button(texts["test"], size="sm", color="secondary", className="me-1", 
                              id={"type": "test-datasource", "index": ds.get('id')}),
-                    dbc.Button("编辑", size="sm", color="warning", className="me-1",
+                    dbc.Button(texts["edit"], size="sm", color="warning", className="me-1",
                              id={"type": "edit-datasource", "index": ds.get('id')}),
-                    dbc.Button("删除", size="sm", color="danger",
+                    dbc.Button(texts["delete"], size="sm", color="danger",
                              id={"type": "delete-datasource", "index": ds.get('id')}),
                 ]),
             ])
@@ -229,11 +230,11 @@ def create_datasource_table(datasources):
         [
             html.Thead(
                 html.Tr([
-                    html.Th("名称"),
-                    html.Th("类型"),
-                    html.Th("状态"),
-                    html.Th("最后更新"),
-                    html.Th("操作"),
+                    html.Th(texts["name"]),
+                    html.Th(texts["type"]),
+                    html.Th(texts["status"]),
+                    html.Th(texts["last_updated"]),
+                    html.Th(texts["actions"]),
                 ])
             ),
             html.Tbody(rows),
@@ -287,10 +288,11 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
         if "btn-test-connection" in trigger_str or "btn-save-datasource" in trigger_str:
             return [dash.no_update] * 6
         
+        texts = language_manager.get_all_texts()
         if trigger_str == "btn-add-datasource.n_clicks":
-            return True, "tab-file", "新增数据源", None, None, ""
+            return True, "tab-file", texts["new_datasource"], None, None, ""
         elif trigger_str == "btn-cancel-datasource.n_clicks":
-            return False, current_tab or "tab-file", "新增数据源", None, None, ""
+            return False, current_tab or "tab-file", texts["new_datasource"], None, None, ""
         elif isinstance(trigger_id, dict):
             try:
                 if trigger_id.get("type") == "edit-datasource" and "index" in trigger_id:
@@ -304,7 +306,8 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                             tab = "tab-database"
                         else:
                             tab = "tab-api"
-                        return True, tab, f"编辑数据源: {ds_config.get('name', 'Unnamed')}", datasource_id, None, ""
+                        texts = language_manager.get_all_texts()
+                        return True, tab, f"{texts['edit_datasource']}: {ds_config.get('name', 'Unnamed')}", datasource_id, None, ""
             except (KeyError, TypeError, AttributeError):
                 pass
         
@@ -347,7 +350,7 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                 status_alert = dbc.Alert(
                     [
                         html.I(className="fas fa-check-circle me-2"),
-                        html.Strong("文件上传成功！"),
+                        html.Strong(texts["upload_success"]),
                         html.Br(),
                         html.Small(f"文件名：{filename}"),
                         html.Br(),
@@ -436,9 +439,10 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
             used_filename = current_file or filename
             
             if active_tab == "tab-file":
+                texts = language_manager.get_all_texts()
                 if not used_filename:
                     datasources = config_manager.load_datasources()
-                    return create_datasource_table(datasources), dbc.Alert("请先上传文件", color="warning", className="m-3"), False
+                    return create_datasource_table(datasources), dbc.Alert(texts["upload_file_first"], color="warning", className="m-3"), False
                 
                 file_path = str(upload_dir / used_filename)
                 name = name_file or used_filename.replace('.csv', '').replace('.xlsx', '').replace('.xls', '')
@@ -461,7 +465,7 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         status_msg = dbc.Alert(
                             [
                                 html.I(className="fas fa-check-circle me-2"),
-                                html.Strong("连接成功！"),
+                                html.Strong(texts["connection_success"]),
                                 html.Br(),
                                 html.Small(f"数据量：{len(df)} 行 × {len(df.columns)} 列"),
                                 html.Hr(),
@@ -488,7 +492,8 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
             elif active_tab == "tab-database":
                 if not all([db_host, db_database, db_user, db_password]):
                     datasources = config_manager.load_datasources()
-                    return create_datasource_table(datasources), dbc.Alert("请填写完整的数据库信息", color="warning", className="m-3"), False
+                    texts = language_manager.get_all_texts()
+                    return create_datasource_table(datasources), dbc.Alert(texts["fill_database_info"], color="warning", className="m-3"), False
                 
                 name = name_db or f"{db_type}_{db_database}"
                 port = int(db_port) if db_port else (5432 if db_type == "postgresql" else 3306)
@@ -511,9 +516,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                             status_msg = dbc.Alert(
                                 [
                                     html.I(className="fas fa-check-circle me-2"),
-                                    html.Strong("数据库连接成功！"),
+                                    html.Strong(texts["connection_success"]),
                                     html.Br(),
-                                    html.Small(f"SQL 查询返回：{len(df)} 行 × {len(df.columns)} 列")
+                                    html.Small(texts["data_rows_cols"].format(len(df), len(df.columns)))
                                 ],
                                 color="success",
                                 className="m-3"
@@ -522,7 +527,7 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                             status_msg = dbc.Alert(
                                 [
                                     html.I(className="fas fa-check-circle me-2"),
-                                    html.Strong("数据库连接成功！")
+                                    html.Strong(texts["connection_success"])
                                 ],
                                 color="success",
                                 className="m-3"
@@ -548,11 +553,12 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                     config["id"] = current_id
                 
             elif active_tab == "tab-api":
+                texts = language_manager.get_all_texts()
                 if not api_url:
                     datasources = config_manager.load_datasources()
-                    return create_datasource_table(datasources), dbc.Alert("请填写 API 地址", color="warning", className="m-3"), False
+                    return create_datasource_table(datasources), dbc.Alert(texts["fill_api_url"], color="warning", className="m-3"), False
                 
-                name = name_api or "API数据源"
+                name = name_api or texts["rest_api"] + " " + texts["datasource_name"]
                 headers = {}
                 params = {}
                 
@@ -561,14 +567,14 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         headers = json.loads(api_headers)
                 except json.JSONDecodeError:
                     datasources = config_manager.load_datasources()
-                    return create_datasource_table(datasources), dbc.Alert("请求头格式错误，请输入有效的 JSON", color="danger", className="m-3"), False
+                    return create_datasource_table(datasources), dbc.Alert(texts["headers_format_error"], color="danger", className="m-3"), False
                 
                 try:
                     if api_params:
                         params = json.loads(api_params)
                 except json.JSONDecodeError:
                     datasources = config_manager.load_datasources()
-                    return create_datasource_table(datasources), dbc.Alert("请求参数格式错误，请输入有效的 JSON", color="danger", className="m-3"), False
+                    return create_datasource_table(datasources), dbc.Alert(texts["params_format_error"], color="danger", className="m-3"), False
                 
                 if button_id == "btn-test-connection":
                     try:
@@ -582,11 +588,11 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         status_msg = dbc.Alert(
                             [
                                 html.I(className="fas fa-check-circle me-2"),
-                                html.Strong("API 连接成功！"),
+                                html.Strong(texts["api_connection_success"]),
                                 html.Br(),
-                                html.Small(f"数据量：{len(df)} 行 × {len(df.columns)} 列"),
+                                html.Small(texts["data_rows_cols"].format(len(df), len(df.columns))),
                                 html.Br(),
-                                html.Small(f"字段：{', '.join([col['name'] for col in schema['columns'][:5]])}{'...' if len(schema['columns']) > 5 else ''}")
+                                html.Small(texts["fields"].format(', '.join([col['name'] for col in schema['columns'][:5]]) + ('...' if len(schema['columns']) > 5 else '')))
                             ],
                             color="success",
                             className="m-3"
@@ -692,7 +698,7 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                                 html.Strong("数据量："),
                                 f"{schema.get('row_count', len(df))} 行 × {len(df.columns)} 列"
                             ], className="mb-2"),
-                            html.P([
+                            html.Div([
                                 html.Strong("字段信息："),
                                 html.Ul([
                                     html.Li(f"{col['name']} ({col['type']})")
