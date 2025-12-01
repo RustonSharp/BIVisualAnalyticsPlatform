@@ -337,26 +337,28 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
             try:
                 df = load_from_file(str(file_path))
                 
+                texts = language_manager.get_all_texts()
                 schema_info = []
                 for col in df.columns:
                     dtype = df[col].dtype
                     if pd.api.types.is_numeric_dtype(dtype):
-                        schema_info.append(f"{col} (数值)")
+                        schema_info.append(f"{col} ({texts['field_type_numeric']})")
                     elif pd.api.types.is_datetime64_any_dtype(dtype):
-                        schema_info.append(f"{col} (日期)")
+                        schema_info.append(f"{col} ({texts['field_type_date']})")
                     else:
-                        schema_info.append(f"{col} (文本)")
+                        schema_info.append(f"{col} ({texts['field_type_text']})")
                 
+                texts = language_manager.get_all_texts()
                 status_alert = dbc.Alert(
                     [
                         html.I(className="fas fa-check-circle me-2"),
                         html.Strong(texts["upload_success"]),
                         html.Br(),
-                        html.Small(f"文件名：{filename}"),
+                        html.Small(f"{texts['filename']}：{filename}"),
                         html.Br(),
-                        html.Small(f"数据量：{len(df)} 行 × {len(df.columns)} 列"),
+                        html.Small(texts["data_rows_cols"].format(len(df), len(df.columns))),
                         html.Br(),
-                        html.Small(f"字段：{', '.join(schema_info[:5])}{'...' if len(schema_info) > 5 else ''}")
+                        html.Small(f"{texts['fields']}{', '.join(schema_info[:5])}{'...' if len(schema_info) > 5 else ''}")
                     ],
                     color="success",
                     className="mt-2"
@@ -374,20 +376,22 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                 return status_alert, filename, preview_table
                 
             except Exception as e:
+                texts = language_manager.get_all_texts()
                 error_alert = dbc.Alert(
                     [
                         html.I(className="fas fa-exclamation-triangle me-2"),
-                        f"文件解析失败：{str(e)}"
+                        f"{texts['connection_failed']}：{str(e)}"
                     ],
                     color="danger",
                     className="mt-2"
                 )
                 return error_alert, None, dash.no_update
         except Exception as e:
+            texts = language_manager.get_all_texts()
             error_alert = dbc.Alert(
                 [
                     html.I(className="fas fa-exclamation-triangle me-2"),
-                    f"上传失败：{str(e)}"
+                    f"{texts['connection_failed']}：{str(e)}"
                 ],
                 color="danger",
                 className="mt-2"
@@ -467,9 +471,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                                 html.I(className="fas fa-check-circle me-2"),
                                 html.Strong(texts["connection_success"]),
                                 html.Br(),
-                                html.Small(f"数据量：{len(df)} 行 × {len(df.columns)} 列"),
+                                html.Small(texts["data_rows_cols"].format(len(df), len(df.columns))),
                                 html.Hr(),
-                                html.Strong("字段信息：", className="small"),
+                                html.Strong(f"{texts['field_info']}：", className="small"),
                                 fields_info
                             ],
                             color="success",
@@ -478,8 +482,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         datasources = config_manager.load_datasources()
                         return create_datasource_table(datasources), status_msg, False
                     except Exception as e:
+                        texts = language_manager.get_all_texts()
                         datasources = config_manager.load_datasources()
-                        return create_datasource_table(datasources), dbc.Alert(f"连接失败：{str(e)}", color="danger", className="m-3"), False
+                        return create_datasource_table(datasources), dbc.Alert(f"{texts['connection_failed']}：{str(e)}", color="danger", className="m-3"), False
                 
                 config = {
                     "type": "file",
@@ -535,8 +540,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         datasources = config_manager.load_datasources()
                         return create_datasource_table(datasources), status_msg, False
                     except Exception as e:
+                        texts = language_manager.get_all_texts()
                         datasources = config_manager.load_datasources()
-                        return create_datasource_table(datasources), dbc.Alert(f"连接失败：{str(e)}", color="danger", className="m-3"), False
+                        return create_datasource_table(datasources), dbc.Alert(f"{texts['connection_failed']}：{str(e)}", color="danger", className="m-3"), False
                 
                 config = {
                     "type": "database",
@@ -600,8 +606,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                         datasources = config_manager.load_datasources()
                         return create_datasource_table(datasources), status_msg, False
                     except Exception as e:
+                        texts = language_manager.get_all_texts()
                         datasources = config_manager.load_datasources()
-                        return create_datasource_table(datasources), dbc.Alert(f"连接失败：{str(e)}", color="danger", className="m-3"), False
+                        return create_datasource_table(datasources), dbc.Alert(f"{texts['connection_failed']}：{str(e)}", color="danger", className="m-3"), False
                 
                 config = {
                     "type": "api",
@@ -616,16 +623,18 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
             
             # 保存配置
             if button_id == "btn-save-datasource":
+                texts = language_manager.get_all_texts()
                 config_manager.save_datasource(config)
                 datasources = config_manager.load_datasources()
-                return create_datasource_table(datasources), dbc.Alert("数据源保存成功！", color="success", className="m-3"), True
+                return create_datasource_table(datasources), dbc.Alert(texts["datasource_saved"], color="success", className="m-3"), True
             
             datasources = config_manager.load_datasources()
             return create_datasource_table(datasources), "", False
             
         except Exception as e:
+            texts = language_manager.get_all_texts()
             datasources = config_manager.load_datasources()
-            return create_datasource_table(datasources), dbc.Alert(f"操作失败：{str(e)}", color="danger", className="m-3"), False
+            return create_datasource_table(datasources), dbc.Alert(f"{texts['operation_failed']}：{str(e)}", color="danger", className="m-3"), False
 
     @app.callback(
         [Output("modal-datasource", "is_open", allow_duplicate=True),
@@ -649,57 +658,59 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
     def handle_datasource_actions(test_clicks, delete_clicks):
         """处理数据源操作（测试/删除）"""
         ctx = callback_context
+        texts = language_manager.get_all_texts()
         if not ctx.triggered:
-            return html.P("请选择一个数据源查看预览", className="text-muted text-center py-5"), dash.no_update
+            return html.P(texts["select_datasource_for_preview"], className="text-muted text-center py-5"), dash.no_update
         
         triggered = ctx.triggered[0]["prop_id"]
+        texts = language_manager.get_all_texts()
         try:
             trigger_id = json.loads(triggered.split(".")[0])
         except json.JSONDecodeError:
-            return dbc.Alert("操作标识解析失败", color="danger"), dash.no_update
+            return dbc.Alert(texts["operation_id_parse_failed"], color="danger"), dash.no_update
         action_type = trigger_id.get("type")
         datasource_id = trigger_id.get("index")
 
+        texts = language_manager.get_all_texts()
         # 删除数据源
         if action_type == "delete-datasource":
             try:
                 config_manager.delete_datasource(datasource_id)
                 datasources = config_manager.load_datasources()
                 table = create_datasource_table(datasources)
-                return dbc.Alert("数据源已删除", color="success"), table
+                return dbc.Alert(texts["datasource_deleted"], color="success"), table
             except Exception as e:
                 datasources = config_manager.load_datasources()
                 table = create_datasource_table(datasources)
-                return dbc.Alert(f"删除失败：{str(e)}", color="danger"), table
+                return dbc.Alert(f"{texts['operation_failed']}：{str(e)}", color="danger"), table
         
         # 测试/预览数据源
         elif action_type == "test-datasource":
             ds_config = config_manager.get_datasource(datasource_id)
             
             if not ds_config:
-                return dbc.Alert("数据源不存在", color="danger"), dash.no_update
+                return dbc.Alert(texts["datasource_not_found"], color="danger"), dash.no_update
             
             try:
                 adapter = DataSourceAdapter(ds_config)
                 df = adapter.fetch_data(limit=100)
                 
                 if df.empty:
-                    return dbc.Alert("数据为空", color="warning"), dash.no_update
+                    return dbc.Alert(texts["data_empty"], color="warning"), dash.no_update
                 
                 schema = adapter.get_schema()
                 info_card = dbc.Card(
                     [
                         dbc.CardHeader([
-                            html.Strong("数据预览"),
+                            html.Strong(texts["data_preview"]),
                             html.Span(f" {ds_config.get('name', 'Unnamed')}", className="text-muted")
                         ]),
                         dbc.CardBody([
                             html.P([
-                                html.Strong("数据量："),
-                                f"{schema.get('row_count', len(df))} 行 × {len(df.columns)} 列"
+                                html.Strong(texts["data_rows_cols"].format(schema.get('row_count', len(df)), len(df.columns))),
                             ], className="mb-2"),
                             html.Div([
-                                html.Strong("字段信息："),
+                                html.Strong(f"{texts['field_info']}："),
                                 html.Ul([
                                     html.Li(f"{col['name']} ({col['type']})")
                                     for col in schema.get('columns', [])[:10]
@@ -719,9 +730,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                 )
                 return info_card, dash.no_update
             except Exception as e:
-                return dbc.Alert(f"预览失败：{str(e)}", color="danger"), dash.no_update
+                return dbc.Alert(f"{texts['preview_failed']}：{str(e)}", color="danger"), dash.no_update
         
-        return html.P("请选择一个数据源查看预览", className="text-muted text-center py-5"), dash.no_update
+        return html.P(texts["select_datasource_for_preview"], className="text-muted text-center py-5"), dash.no_update
 
     @app.callback(
         [Output("upload-file", "filename", allow_duplicate=True),

@@ -132,7 +132,7 @@ def create_chart_designer_page():
                                                             html.Div(
                                                                 id="drop-y-axis",
                                                                 children=[
-                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                    html.P(texts["drag_field_here"], className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
                                                                     "minHeight": "60px",
@@ -155,7 +155,7 @@ def create_chart_designer_page():
                                                             html.Div(
                                                                 id="drop-group",
                                                                 children=[
-                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                    html.P(texts["drag_field_here"], className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
                                                                     "minHeight": "60px",
@@ -194,7 +194,7 @@ def create_chart_designer_page():
                                                             html.Div(
                                                                 id="drop-table-col-1",
                                                                 children=[
-                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                    html.P(texts["drag_field_here"], className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
                                                                     "minHeight": "50px",
@@ -216,7 +216,7 @@ def create_chart_designer_page():
                                                             html.Div(
                                                                 id="drop-table-row-1",
                                                                 children=[
-                                                                    html.P("拖拽字段到此处", className="text-muted text-center mb-0"),
+                                                                    html.P(texts["drag_field_here"], className="text-muted text-center mb-0"),
                                                                 ],
                                                                 style={
                                                                     "minHeight": "50px",
@@ -689,9 +689,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     if clicked_chart.get('id') != chart_id:
                         return dash.no_update, dash.no_update
                 
+                texts = language_manager.get_all_texts()
                 chart_config = config_manager.get_chart(chart_id)
                 if chart_config:
-                    chart_name = chart_config.get('name', '未命名图表')
+                    chart_name = chart_config.get('name', texts['unnamed_chart'])
                     config_manager.delete_chart(chart_id)
                     
                     charts = config_manager.load_charts()
@@ -715,9 +716,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
     )
     def load_datasource_fields(datasource_id):
         """根据数据源加载可拖拽字段列表"""
+        texts = language_manager.get_all_texts()
         assignments = default_chart_assignments()
         if not datasource_id:
-            return html.P("请选择数据源后查看字段", className="text-muted mb-0"), assignments
+            return html.P(texts["select_datasource_to_view_fields"], className="text-muted mb-0"), assignments
         try:
             ds_config = config_manager.get_datasource(datasource_id)
             if not ds_config:
@@ -730,11 +732,11 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 texts = language_manager.get_all_texts()
                 return html.P(texts["no_fields_detected"], className="text-muted mb-0"), assignments
             type_labels = {
-                'date': '日期',
-                'datetime64[ns]': '日期',
-                'numeric': '数值',
-                'integer': '整数',
-                'text': '文本'
+                'date': texts['field_type_date'],
+                'datetime64[ns]': texts['field_type_date'],
+                'numeric': texts['field_type_numeric'],
+                'integer': texts['field_type_numeric'],
+                'text': texts['field_type_text']
             }
             type_colors = {
                 'date': 'primary',
@@ -779,6 +781,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
     )
     def toggle_chart_config(chart_type):
         """根据图表类型显示/隐藏不同的配置界面"""
+        texts = language_manager.get_all_texts()
         if chart_type == "table":
             return {"display": "none"}, {"display": "block"}, {"display": "none"}, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         elif chart_type == "pie":
@@ -787,10 +790,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 {"display": "none"},
                 {"display": "block"},
                 {"display": "none"},
-                "数值字段（必需）",
-                "提示：拖拽数值字段到下方区域",
-                "分类字段（必需）",
-                "提示：拖拽分类字段到下方区域"
+                texts["numeric_field_required"],
+                texts["hint_drag_numeric_field"],
+                texts["category_field_required"],
+                texts["hint_drag_category_field"]
             )
         else:
             return (
@@ -798,10 +801,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 {"display": "none"},
                 {"display": "block"},
                 {"display": "block"},
-                "Y 轴",
-                "提示：拖拽字段到下方区域",
-                "分组/颜色",
-                "提示：拖拽字段到下方区域"
+                texts["y_axis_label"],
+                texts["hint_drag_field_below"],
+                texts["group_color_label"],
+                texts["hint_drag_field_below"]
             )
 
     @app.callback(
@@ -1213,8 +1216,9 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         field_agg_config = field_agg_config or {}
         default_agg_function = default_agg_function or 'sum'
         
+        texts = language_manager.get_all_texts()
         if not y_fields or len(y_fields) == 0:
-            return html.P("请先添加Y轴字段", className="text-muted small mb-2")
+            return html.P(texts["add_y_axis_field_first"], className="text-muted small mb-2")
         
         # 为每个Y轴字段创建一个聚合函数选择器
         field_selectors = []
@@ -1227,12 +1231,12 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                         dbc.Select(
                             id={"type": "field-agg-function", "field": field},
                             options=[
-                                {"label": "求和 (SUM)", "value": "sum"},
-                                {"label": "平均值 (AVG)", "value": "avg"},
-                                {"label": "计数 (COUNT)", "value": "count"},
-                                {"label": "最大值 (MAX)", "value": "max"},
-                                {"label": "最小值 (MIN)", "value": "min"},
-                                {"label": "占比 (Percentage)", "value": "percentage"},
+                                {"label": texts["sum"], "value": "sum"},
+                                {"label": texts["avg"], "value": "avg"},
+                                {"label": texts["count"], "value": "count"},
+                                {"label": texts["max"], "value": "max"},
+                                {"label": texts["min"], "value": "min"},
+                                {"label": texts["percentage"], "value": "percentage"},
                             ],
                             value=current_func,
                             size="sm",
@@ -1278,17 +1282,16 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
     )
     def update_chart_preview(datasource_id, chart_type, assignments, agg_function, field_agg_functions, title, color_theme, options, table_orientation, custom_colors):
         """根据当前配置生成预览图表"""
+        texts = language_manager.get_all_texts()
         try:
             if not datasource_id:
-                return html.P("请选择数据源", className="text-muted text-center py-5")
+                return html.P(texts["select_datasource"], className="text-muted text-center py-5")
             ds_config = config_manager.get_datasource(datasource_id)
-            texts = language_manager.get_all_texts()
             if not ds_config:
                 return html.P(texts["datasource_not_found"], className="text-muted text-center py-5")
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             if df is None or df.empty:
-                texts = language_manager.get_all_texts()
                 return html.P(texts["data_empty_cannot_generate"], className="text-muted text-center py-5")
             assignments = assignments or default_chart_assignments()
             options = options or []
@@ -1304,10 +1307,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 
                 if table_orientation == 'horizontal':
                     if not table_columns:
-                        return html.P("请拖拽字段到表格列区域", className="text-muted text-center py-5")
+                        return html.P(texts["drag_field_to_table_columns"], className="text-muted text-center py-5")
                     selected_columns = [col for col in table_columns if col in df.columns]
                     if not selected_columns:
-                        return html.P("所选字段不存在于数据中", className="text-muted text-center py-5")
+                        return html.P(texts["field_not_in_data"], className="text-muted text-center py-5")
                     result = df[selected_columns]
                     if isinstance(result, pd.Series):
                         table_df: pd.DataFrame = result.to_frame()
@@ -1316,21 +1319,22 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     assert isinstance(table_df, pd.DataFrame), "table_df must be a DataFrame"
                 else:
                     if not table_rows:
-                        return html.P("请拖拽字段到表格行区域", className="text-muted text-center py-5")
+                        return html.P(texts["drag_field_to_table_rows"], className="text-muted text-center py-5")
                     selected_rows = [row for row in table_rows if row in df.columns]
                     if not selected_rows:
-                        return html.P("所选字段不存在于数据中", className="text-muted text-center py-5")
+                        return html.P(texts["field_not_in_data"], className="text-muted text-center py-5")
                     transposed = df[selected_rows].T
                     if isinstance(transposed, pd.Series):
                         table_df = transposed.to_frame()
                     else:
                         table_df = transposed
                     assert isinstance(table_df, pd.DataFrame), "table_df must be a DataFrame"
-                    table_df.columns = [f'行{i+1}' for i in range(len(table_df.columns))]
+                    # 使用通用的列名，避免硬编码中文
+                    table_df.columns = [f'Col{i+1}' for i in range(len(table_df.columns))]
                 
                 chart_config = {
                     "type": "table",
-                    "title": title or "数据表格",
+                    "title": title or texts["data_table"],
                     "limit": 100,
                 }
                 fig = chart_engine.create_chart(table_df, chart_config)
@@ -1341,14 +1345,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 group_field = assignments.get('group')
                 
                 if chart_type != 'pie' and not x_field:
-                    return html.P("请将字段拖拽到 X 轴", className="text-muted text-center py-5")
+                    return html.P(texts["drag_field_to_x_axis"], className="text-muted text-center py-5")
                 if not y_fields:
-                    return html.P("请至少选择一个 Y 轴字段", className="text-muted text-center py-5")
+                    return html.P(texts["at_least_one_y_axis"], className="text-muted text-center py-5")
                 if chart_type == 'pie':
                     if not group_field and not x_field:
-                        return html.P("饼图需要分组字段", className="text-muted text-center py-5")
+                        return html.P(texts["pie_needs_group_field"], className="text-muted text-center py-5")
                     if not y_fields:
-                        return html.P("饼图需要一个数值字段", className="text-muted text-center py-5")
+                        return html.P(texts["pie_needs_numeric_field"], className="text-muted text-center py-5")
                     if not group_field:
                         group_field = x_field
                 
@@ -1357,7 +1361,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     "x": x_field,
                     "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
                     "group": group_field,
-                    "title": title or "图表预览",
+                    "title": title or texts["chart_preview"],
                     "color_theme": color_theme or "default",
                     "custom_colors": custom_colors or {},
                     "show_labels": "show-labels" in options,
@@ -1368,7 +1372,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 fig = chart_engine.create_chart(df, chart_config)
                 return dcc.Graph(figure=fig, id="preview-chart")
         except Exception as e:
-            return dbc.Alert(f"生成图表失败：{str(e)}", color="danger")
+            return dbc.Alert(f"{texts['generate_chart_failed']}：{str(e)}", color="danger")
 
     @app.callback(
         [Output("current-chart-config", "data", allow_duplicate=True),
@@ -1390,25 +1394,24 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
     )
     def save_chart(save_clicks, datasource_id, chart_type, assignments, agg_function, field_agg_functions, title, color_theme, options, custom_colors, editing_id):
         """保存图表配置"""
+        texts = language_manager.get_all_texts()
         if not datasource_id:
-            return dash.no_update, dbc.Alert("请先选择数据源", color="warning", className="m-2"), dash.no_update, dash.no_update
+            return dash.no_update, dbc.Alert(texts["select_datasource_first"], color="warning", className="m-2"), dash.no_update, dash.no_update
         try:
             ds_config = config_manager.get_datasource(datasource_id)
-            texts = language_manager.get_all_texts()
             if not ds_config:
                 return dash.no_update, dbc.Alert(texts["datasource_not_found"], color="warning", className="m-2"), dash.no_update, dash.no_update
             adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
             df = adapter.fetch_data(limit=1000)
             if df is None or df.empty:
-                texts = language_manager.get_all_texts()
                 return dash.no_update, dbc.Alert(texts["data_empty"], color="warning", className="m-2"), dash.no_update, dash.no_update
             assignments = assignments or default_chart_assignments()
             x_field = assignments.get('x')
             y_fields = assignments.get('y') or []
             if chart_type != 'table' and not x_field and chart_type != 'pie':
-                return dash.no_update, dbc.Alert("请将字段拖拽到 X 轴", color="warning", className="m-2"), dash.no_update, dash.no_update
+                return dash.no_update, dbc.Alert(texts["drag_field_to_x_axis"], color="warning", className="m-2"), dash.no_update, dash.no_update
             if not y_fields and chart_type != 'table':
-                return dash.no_update, dbc.Alert("请至少选择一个 Y 轴字段", color="warning", className="m-2"), dash.no_update, dash.no_update
+                return dash.no_update, dbc.Alert(texts["at_least_one_y_axis"], color="warning", className="m-2"), dash.no_update, dash.no_update
             options = options or []
             chart_config = {
                 "datasource_id": datasource_id,
@@ -1416,7 +1419,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 "x": x_field,
                 "y": y_fields if len(y_fields) > 1 else (y_fields[0] if y_fields else None),
                 "group": assignments.get('group'),
-                "title": title or "图表预览",
+                "title": title or texts["chart_preview"],
                 "color_theme": color_theme or "default",
                 "custom_colors": custom_colors or {},
                 "show_labels": "show-labels" in options,
@@ -1430,7 +1433,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 chart_config['table_rows'] = assignments.get('table_rows', [])
                 chart_config['table_orientation'] = assignments.get('table_orientation', 'horizontal')
             
-            chart_config['name'] = title or "未命名图表"
+            chart_config['name'] = title or texts["unnamed_chart"]
             
             # 如果正在编辑已有图表，保留图表ID以便更新
             if editing_id:
@@ -1449,9 +1452,9 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     chart_config = updated_config
             
             # 保存成功后，保持当前编辑状态（用户可以继续编辑或点击"新增"创建新图表）
-            return chart_config, dbc.Alert("图表保存成功！", color="success", className="m-2"), charts_list, editing_id
+            return chart_config, dbc.Alert(texts["chart_saved_success"], color="success", className="m-2"), charts_list, editing_id
         except Exception as e:
-            return dash.no_update, dbc.Alert(f"保存图表失败：{str(e)}", color="danger", className="m-2"), dash.no_update, dash.no_update
+            return dash.no_update, dbc.Alert(f"{texts['save_chart_failed']}：{str(e)}", color="danger", className="m-2"), dash.no_update, dash.no_update
 
     @app.callback(
         [Output("editing-chart-id", "data", allow_duplicate=True),
@@ -1474,6 +1477,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         if not new_clicks:
             return [dash.no_update] * 12
         
+        texts = language_manager.get_all_texts()
         # 重置为默认值
         assignments = default_chart_assignments()
         
@@ -1489,7 +1493,7 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             ["show-legend"],  # chart-options: 默认只显示图例
             {},  # custom-colors-config: 清空自定义颜色
             "horizontal",  # table-orientation: 默认横向
-            html.P("已创建新图表，请开始配置", className="text-muted text-center py-2")  # 提示信息
+            html.P(texts["new_chart_created"], className="text-muted text-center py-2")  # 提示信息
         )
 
     @app.callback(

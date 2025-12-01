@@ -289,12 +289,12 @@ def create_dashboard_page():
                         [
                             dbc.ButtonGroup(
                                 [
-                                    dbc.Button([html.I(className="fas fa-plus me-1"), "添加图表"], 
+                                    dbc.Button([html.I(className="fas fa-plus me-1"), texts["add_chart"]], 
                                               id="btn-add-chart-to-dashboard", color="success", size="sm"),
-                                    dbc.Button([html.I(className="fas fa-filter me-1"), "清除筛选"], 
+                                    dbc.Button([html.I(className="fas fa-filter me-1"), texts["clear_filter"]], 
                                               id="btn-clear-chart-filter", color="warning", size="sm", outline=True, 
                                               style={"display": "none"}),
-                                    dbc.Button([html.I(className="fas fa-share-alt me-1"), "分享链接"], 
+                                    dbc.Button([html.I(className="fas fa-share-alt me-1"), texts["share_link"]], 
                                               id="btn-share-dashboard", color="primary", size="sm", outline=True),
                                     dbc.ButtonGroup([
                                         dbc.Button([html.I(className="fas fa-image me-1"), "PNG"], 
@@ -574,7 +574,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         
         chart_ids = dashboard_config.get('chart_ids', [])
         if not chart_ids:
-            return html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5"), dash.no_update
+            texts = language_manager.get_all_texts()
+            return html.P(texts["no_charts_in_dashboard"], className="text-muted text-center py-5"), dash.no_update
         
         charts = config_manager.load_charts()
         chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
@@ -971,7 +972,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     className="m-4"
                 ), data_cache or {}
             else:
-                result = html.P("该仪表盘还没有添加图表，请点击\"添加图表\"按钮添加", className="text-muted text-center py-5")
+                texts = language_manager.get_all_texts()
+                result = html.P(texts["no_charts_in_dashboard"], className="text-muted text-center py-5")
                 # 如果有导出状态消息，显示在顶部
                 if export_status and export_status.get('message'):
                     return [export_status['message'], result], data_cache
@@ -1120,13 +1122,15 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     chart_ids.append(selected_chart_id)
                     dashboard_config['chart_ids'] = chart_ids
                     config_manager.save_dashboard(dashboard_config)
+                    texts = language_manager.get_all_texts()
                     updated_dashboard = config_manager.get_dashboard(dashboard_config.get('id'))
                     if updated_dashboard:
-                        return False, dash.no_update, updated_dashboard, dbc.Alert("图表已添加到仪表盘", color="success", className="m-2")
+                        return False, dash.no_update, updated_dashboard, dbc.Alert(texts["chart_added_to_dashboard"], color="success", className="m-2")
                     else:
-                        return False, dash.no_update, dashboard_config, dbc.Alert("图表已添加到仪表盘", color="success", className="m-2")
+                        return False, dash.no_update, dashboard_config, dbc.Alert(texts["chart_added_to_dashboard"], color="success", className="m-2")
                 else:
-                    return False, dash.no_update, dash.no_update, dbc.Alert("该图表已存在于仪表盘中", color="warning", className="m-2")
+                    texts = language_manager.get_all_texts()
+                    return False, dash.no_update, dash.no_update, dbc.Alert(texts["chart_already_in_dashboard"], color="warning", className="m-2")
             else:
                 return False, dash.no_update, dash.no_update, dbc.Alert("请选择图表和仪表盘", color="warning", className="m-2")
         
