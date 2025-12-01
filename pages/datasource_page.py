@@ -11,6 +11,9 @@ from components.common import create_table_from_dataframe
 from data_adapter import DataSourceAdapter
 from load_data import load_from_file, DBConfig, load_from_database, load_from_api
 from language_manager import language_manager
+from logger import get_logger
+
+logger = get_logger('datasource_page')
 
 
 def create_datasource_page():
@@ -624,9 +627,14 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
             # 保存配置
             if button_id == "btn-save-datasource":
                 texts = language_manager.get_all_texts()
-                config_manager.save_datasource(config)
-                datasources = config_manager.load_datasources()
-                return create_datasource_table(datasources), dbc.Alert(texts["datasource_saved"], color="success", className="m-3"), True
+                logger.info(f"用户保存数据源 [类型: {active_tab}, 名称: {config.get('name', 'Unnamed')}]")
+                if config_manager.save_datasource(config):
+                    datasources = config_manager.load_datasources()
+                    return create_datasource_table(datasources), dbc.Alert(texts["datasource_saved"], color="success", className="m-3"), True
+                else:
+                    logger.error(f"保存数据源失败 [类型: {active_tab}]")
+                    datasources = config_manager.load_datasources()
+                    return create_datasource_table(datasources), dbc.Alert("保存失败，请查看日志", color="danger", className="m-3"), False
             
             datasources = config_manager.load_datasources()
             return create_datasource_table(datasources), "", False

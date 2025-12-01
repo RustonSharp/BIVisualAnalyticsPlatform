@@ -9,6 +9,9 @@ import json
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from load_data import load_from_file, load_from_database, load_from_api, DBConfig
+from logger import get_logger, log_performance
+
+logger = get_logger('data_adapter')
 
 
 class DataSourceAdapter:
@@ -69,9 +72,10 @@ class DataSourceAdapter:
             
             return False
         except Exception as e:
-            print(f"连接失败: {e}")
+            logger.error(f"数据源连接失败 [类型: {self.type}, 名称: {self.name}]: {e}", exc_info=True)
             return False
     
+    @log_performance
     def fetch_data(self, limit: Optional[int] = None, filters: Optional[Dict] = None) -> pd.DataFrame:
         """获取数据
         
@@ -83,6 +87,7 @@ class DataSourceAdapter:
             DataFrame
         """
         try:
+            logger.debug(f"开始获取数据 [类型: {self.type}, 名称: {self.name}, 限制: {limit}]")
             if self.type == 'file':
                 file_path = self.config.get('file_path')
                 df = load_from_file(file_path)
@@ -126,15 +131,19 @@ class DataSourceAdapter:
                             df = df[df[col].isin(condition['values'])]
             
             self._cache = df
+            logger.info(f"数据获取成功 [类型: {self.type}, 名称: {self.name}, 行数: {len(df)}, 列数: {len(df.columns)}]")
             return df
         
         except Exception as e:
-            print(f"获取数据失败: {e}")
+            logger.error(f"获取数据失败 [类型: {self.type}, 名称: {self.name}]: {e}", exc_info=True)
             return pd.DataFrame()
     
+    @log_performance
     def get_schema(self) -> Dict[str, Any]:
         """获取字段信息（类型、统计信息等）"""
+        logger.debug(f"获取数据源字段信息 [类型: {self.type}, 名称: {self.name}]")
         if self._schema is not None:
+            logger.debug("使用缓存的字段信息")
             return self._schema
         
         # 获取数据（限制行数以加快速度）

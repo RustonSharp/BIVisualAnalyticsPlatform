@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Tuple, Dict, Any
 import plotly.graph_objects as go
+from logger import get_logger, log_performance
+
+logger = get_logger('export_utils')
 
 
 def generate_dashboard_html(
@@ -119,22 +122,22 @@ def html_to_png(html_path: Path, output_path: Path) -> bool:
     # 方法1: 尝试使用imgkit (需要wkhtmltopdf)
     try:
         import imgkit  # type: ignore
-        print(f"[HTML转PNG] 尝试使用imgkit转换...")
+        logger.debug("尝试使用imgkit转换HTML为PNG")
         options = {
             'format': 'png',
             'width': 1400,
             'disable-smart-shrinking': True
         }
         imgkit.from_file(str(html_path), str(output_path), options=options)
-        print(f"[HTML转PNG] 使用imgkit转换成功: {output_path}")
+        logger.info(f"使用imgkit转换成功: {output_path}")
         return True
     except (ImportError, Exception) as e:
-        print(f"[HTML转PNG] imgkit不可用或失败: {str(e)}")
+        logger.debug(f"imgkit不可用或失败: {str(e)}")
     
     # 方法2: 尝试使用Playwright
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
-        print(f"[HTML转PNG] 尝试使用Playwright转换...")
+        logger.debug("尝试使用Playwright转换HTML为PNG")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -144,10 +147,10 @@ def html_to_png(html_path: Path, output_path: Path) -> bool:
             page.wait_for_timeout(3000)  # 等待图表渲染
             page.screenshot(path=str(output_path), full_page=True)
             browser.close()
-        print(f"[HTML转PNG] 使用Playwright转换成功: {output_path}")
+        logger.info(f"使用Playwright转换成功: {output_path}")
         return True
     except (ImportError, Exception) as e:
-        print(f"[HTML转PNG] Playwright不可用或失败: {str(e)}")
+        logger.warning(f"Playwright不可用或失败: {str(e)}")
     
     return False
 
@@ -165,7 +168,7 @@ def html_to_pdf(html_path: Path, output_path: Path) -> bool:
     # 方法1: 尝试使用imgkit (需要wkhtmltopdf)
     try:
         import imgkit  # type: ignore
-        print(f"[HTML转PDF] 尝试使用imgkit转换...")
+        logger.debug("尝试使用imgkit转换HTML为PDF")
         options = {
             'format': 'pdf',
             'page-size': 'A4',
@@ -177,15 +180,15 @@ def html_to_pdf(html_path: Path, output_path: Path) -> bool:
             'disable-smart-shrinking': True
         }
         imgkit.from_file(str(html_path), str(output_path), options=options)
-        print(f"[HTML转PDF] 使用imgkit转换成功: {output_path}")
+        logger.info(f"使用imgkit转换成功: {output_path}")
         return True
     except (ImportError, Exception) as e:
-        print(f"[HTML转PDF] imgkit不可用或失败: {str(e)}")
+        logger.debug(f"imgkit不可用或失败: {str(e)}")
     
     # 方法2: 尝试使用Playwright
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
-        print(f"[HTML转PDF] 尝试使用Playwright转换...")
+        logger.debug("尝试使用Playwright转换HTML为PDF")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
@@ -195,10 +198,10 @@ def html_to_pdf(html_path: Path, output_path: Path) -> bool:
             page.wait_for_timeout(3000)  # 等待图表渲染
             page.pdf(path=str(output_path), format='A4', print_background=True)
             browser.close()
-        print(f"[HTML转PDF] 使用Playwright转换成功: {output_path}")
+        logger.info(f"使用Playwright转换成功: {output_path}")
         return True
     except (ImportError, Exception) as e:
-        print(f"[HTML转PDF] Playwright不可用或失败: {str(e)}")
+        logger.warning(f"Playwright不可用或失败: {str(e)}")
     
     return False
 
@@ -228,7 +231,7 @@ def export_dashboard_to_html(
     with open(export_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
-    print(f"[HTML导出] 仪表盘已导出为HTML: {export_path}")
+    logger.info(f"仪表盘已导出为HTML: {export_path}")
     return export_path
 
 
@@ -256,7 +259,7 @@ def export_dashboard_to_png(
     export_path = export_dir / f"{dashboard_name}_{timestamp}.png"
     
     # 步骤1: 生成HTML内容
-    print(f"[PNG导出] 步骤1: 生成HTML内容...")
+    logger.debug("PNG导出步骤1: 生成HTML内容")
     html_content = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -301,18 +304,18 @@ def export_dashboard_to_png(
     
     # 步骤2: 保存HTML临时文件
     temp_html_path = export_dir / f"temp_dashboard_{timestamp}.html"
-    print(f"[PNG导出] 步骤2: 保存HTML到临时文件: {temp_html_path}")
+    logger.debug(f"PNG导出步骤2: 保存HTML到临时文件: {temp_html_path}")
     with open(temp_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
     try:
         # 步骤3: 尝试将HTML转PNG
-        print(f"[PNG导出] 步骤3: 将HTML转换为PNG...")
+        logger.debug("PNG导出步骤3: 将HTML转换为PNG")
         html_converted = html_to_png(temp_html_path, export_path)
         
         # 如果HTML转PNG失败，回退到Kaleido直接转换
         if not html_converted:
-            print(f"[PNG导出] HTML转PNG失败，回退到Kaleido直接转换...")
+            logger.warning("HTML转PNG失败，回退到Kaleido直接转换")
             try:
                 import kaleido
                 # 如果只有一个图表，直接转换
@@ -344,17 +347,17 @@ def export_dashboard_to_png(
                         combined_img.paste(img, (0, y_offset))
                         y_offset += chart_height + spacing
                     combined_img.save(str(export_path))
-                print(f"[PNG导出] 使用Kaleido转换成功: {export_path}")
+                logger.info(f"使用Kaleido转换成功: {export_path}")
             except Exception as e:
-                print(f"[PNG导出] Kaleido转换失败: {str(e)}")
+                logger.error(f"Kaleido转换失败: {str(e)}", exc_info=True)
                 raise Exception("无法将HTML转换为PNG，请安装imgkit、playwright或kaleido库")
     finally:
         # 清理临时HTML文件
         if temp_html_path.exists():
             temp_html_path.unlink()
-            print(f"[PNG导出] 临时HTML文件已清理")
+            logger.debug("临时HTML文件已清理")
     
-    print(f"[PNG导出] PNG导出完成: {export_path}")
+    logger.info(f"PNG导出完成: {export_path}")
     return export_path
 
 
@@ -382,23 +385,23 @@ def export_dashboard_to_pdf(
     export_path = export_dir / f"{dashboard_name}_{timestamp}.pdf"
     
     # 步骤1: 生成HTML内容（使用完整的HTML模板，和HTML导出一样）
-    print(f"[PDF导出] 步骤1: 生成HTML内容...")
+    logger.debug("PDF导出步骤1: 生成HTML内容")
     html_content = generate_dashboard_html(dashboard_config, figures_with_titles)
     
     # 步骤2: 保存HTML临时文件
     temp_html_path = export_dir / f"temp_dashboard_{timestamp}.html"
-    print(f"[PDF导出] 步骤2: 保存HTML到临时文件: {temp_html_path}")
+    logger.debug(f"PDF导出步骤2: 保存HTML到临时文件: {temp_html_path}")
     with open(temp_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
     try:
         # 步骤3: 尝试将HTML转PDF
-        print(f"[PDF导出] 步骤3: 将HTML转换为PDF...")
+        logger.debug("PDF导出步骤3: 将HTML转换为PDF")
         html_converted = html_to_pdf(temp_html_path, export_path)
         
         # 如果HTML转PDF失败，回退到reportlab方案
         if not html_converted:
-            print(f"[PDF导出] HTML转PDF失败，回退到reportlab方案...")
+            logger.warning("HTML转PDF失败，回退到reportlab方案")
             try:
                 from reportlab.lib.pagesizes import A4
                 from reportlab.pdfgen import canvas
@@ -410,11 +413,11 @@ def export_dashboard_to_pdf(
                 
                 temp_images = []
                 for idx, (fig, title, chart_type) in enumerate(figures_with_titles):
-                    print(f"[PDF导出] 正在处理图表 {idx+1}/{len(figures_with_titles)}: {title}")
+                    logger.debug(f"正在处理图表 {idx+1}/{len(figures_with_titles)}: {title}")
                     try:
                         img_bytes = fig.to_image(format="png", width=1000, height=600, scale=2, engine='kaleido')
                     except Exception as e:
-                        print(f"[PDF导出] 图表 {idx+1} 图像生成失败，尝试不使用engine参数: {str(e)}")
+                        logger.warning(f"图表 {idx+1} 图像生成失败，尝试不使用engine参数: {str(e)}")
                         img_bytes = fig.to_image(format="png", width=1000, height=600, scale=2)
                     img = Image.open(io_module.BytesIO(img_bytes))
                     
@@ -447,23 +450,23 @@ def export_dashboard_to_pdf(
                     if temp_img.exists():
                         temp_img.unlink()
                 
-                print(f"[PDF导出] 使用reportlab转换成功: {export_path}")
+                logger.info(f"使用reportlab转换成功: {export_path}")
             except ImportError:
                 # 如果没有reportlab，尝试使用kaleido直接导出PDF
                 if len(figures_with_titles) == 1:
                     figures_with_titles[0][0].write_image(str(export_path), format="pdf", width=1200, height=800)
-                    print(f"[PDF导出] 使用Kaleido导出PDF: {export_path}")
+                    logger.info(f"使用Kaleido导出PDF: {export_path}")
                 else:
                     raise Exception("PDF导出需要安装imgkit（需要wkhtmltopdf）、playwright或reportlab库。")
             except Exception as e:
-                print(f"[PDF导出] reportlab转换失败: {str(e)}")
+                logger.error(f"reportlab转换失败: {str(e)}", exc_info=True)
                 raise Exception(f"PDF导出失败：{str(e)}。请安装imgkit（需要wkhtmltopdf）、playwright或reportlab库。")
     finally:
         # 清理临时HTML文件
         if temp_html_path.exists():
             temp_html_path.unlink()
-            print(f"[PDF导出] 临时HTML文件已清理")
+            logger.debug("临时HTML文件已清理")
     
-    print(f"[PDF导出] PDF导出完成: {export_path}")
+    logger.info(f"PDF导出完成: {export_path}")
     return export_path
 

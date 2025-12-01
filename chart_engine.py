@@ -7,9 +7,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from typing import Dict, Any, Optional, List, cast, TYPE_CHECKING
+from logger import get_logger, log_performance
 
 if TYPE_CHECKING:
     from pandas import Series
+
+logger = get_logger('chart_engine')
 
 
 class ChartEngine:
@@ -28,6 +31,7 @@ class ChartEngine:
         """初始化图表引擎"""
         pass
     
+    @log_performance
     def create_chart(self, data: pd.DataFrame, config: Dict[str, Any]) -> go.Figure:
         """根据配置创建图表
         
@@ -227,10 +231,10 @@ class ChartEngine:
                         if result_col not in y_fields:
                             y_fields.append(result_col)
                     except Exception as e:
-                        print(f"自定义公式计算失败: {str(e)}")
+                        logger.warning(f"自定义公式计算失败 [字段: {field}]: {str(e)}", exc_info=True)
         
         except Exception as e:
-            print(f"应用自定义公式时出错: {str(e)}")
+            logger.error(f"应用自定义公式时出错: {str(e)}", exc_info=True)
         
         return data
     

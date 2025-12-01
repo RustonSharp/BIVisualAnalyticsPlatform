@@ -1,6 +1,9 @@
 """仪表盘页面模块"""
 from language_manager import language_manager
+from logger import get_logger, log_performance
 import dash
+
+logger = get_logger('dashboard')
 from dash import dcc, html, Input, Output, State, ALL, callback_context
 import dash_bootstrap_components as dbc
 import json
@@ -103,7 +106,6 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
     
     if not date_field:
         # 没有找到日期字段，返回原DataFrame和提示信息
-        from language_manager import language_manager
         texts = language_manager.get_all_texts()
         return df, texts["no_date_field_found"]
     
@@ -113,7 +115,6 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             # 尝试转换为datetime类型
             df[date_field] = pd.to_datetime(df[date_field], errors='coerce')
     except Exception as e:
-        from language_manager import language_manager
         texts = language_manager.get_all_texts()
         return df, texts["date_field_conversion_failed"].format(str(e))
     
@@ -129,7 +130,6 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
                 end_ts = pd.Timestamp(end_date)
                 # 检查是否为NaT
                 if pd.isna(start_ts) or pd.isna(end_ts):  # type: ignore[arg-type]
-                    from language_manager import language_manager
                     texts = language_manager.get_all_texts()
                     return df, texts["date_format_error_parse"]
                 start = cast(pd.Timestamp, start_ts)
@@ -140,17 +140,14 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
                     delta1 = pd.Timedelta(days=1)
                     delta2 = pd.Timedelta(seconds=1)
                     if pd.isna(delta1) or pd.isna(delta2):  # type: ignore[arg-type]
-                        from language_manager import language_manager
                         texts = language_manager.get_all_texts()
                         return df, texts["date_format_error_timedelta"]
                     delta = delta1 - delta2  # type: ignore[operator]
                     end = cast(pd.Timestamp, end + delta)  # type: ignore[operator]
             except (ValueError, TypeError) as e:
-                from language_manager import language_manager
                 texts = language_manager.get_all_texts()
                 return df, texts["date_format_error"].format(str(e))
         else:
-            from language_manager import language_manager
             texts = language_manager.get_all_texts()
             return df, texts["custom_range_needs_dates"]
     elif time_filter == "today":
@@ -172,7 +169,6 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             # 移除日期字段中的NaT值（无效日期）
             df_valid = df[df[date_field].notna()].copy()
             if len(df_valid) == 0:
-                from language_manager import language_manager
                 texts = language_manager.get_all_texts()
                 return df, texts["no_valid_date_data"]
             
@@ -184,7 +180,6 @@ def apply_time_filter(df: pd.DataFrame, time_filter: str, start_date: Optional[s
             df_result = cast(pd.DataFrame, df_filtered)
             return df_result, date_field
         except Exception as e:
-            from language_manager import language_manager
             texts = language_manager.get_all_texts()
             return df, texts["time_filter_failed"].format(str(e))
     
@@ -451,7 +446,7 @@ def create_dashboard_page():
                         [
                             html.Span(texts["data_drill_down_details"], className="me-auto"),
                             dbc.Button(
-                                [html.I(className="fas fa-arrow-left me-1"), "返回"],
+                                [html.I(className="fas fa-arrow-left me-1"), texts["back"]],
                                 id="btn-drill-down-back",
                                 color="link",
                                 size="sm",
@@ -463,13 +458,13 @@ def create_dashboard_page():
                     dbc.ModalBody(
                         [
                             html.Div(id="drill-down-content", children=[
-                                html.P("正在加载详细数据...", className="text-muted text-center py-5"),
+                                html.P(texts["loading_drill_down_data"], className="text-muted text-center py-5"),
                             ]),
                         ]
                     ),
                     dbc.ModalFooter(
                         [
-                            dbc.Button("关闭", id="btn-close-drill-down-modal", color="secondary"),
+                            dbc.Button(texts["close"], id="btn-close-drill-down-modal", color="secondary"),
                         ]
                     ),
                 ],
@@ -565,15 +560,17 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         [State("chart-data-cache", "data")],
         prevent_initial_call='initial_duplicate'
     )
+    @log_performance
     def render_dashboard_charts(dashboard_config, time_filter, start_date, end_date, export_status, filter_state, refresh_trigger, data_cache):
         """渲染仪表盘中的图表"""
         if not dashboard_config:
-            from language_manager import language_manager
             texts = language_manager.get_all_texts()
             return html.P(texts["please_select_or_create_dashboard"], className="text-muted text-center py-5"), dash.no_update
         
+        dashboard_id = dashboard_config.get('id')
         chart_ids = dashboard_config.get('chart_ids', [])
         if not chart_ids:
+            logger.info(f"仪表盘无图表 [ID: {dashboard_id}]")
             texts = language_manager.get_all_texts()
             return html.P(texts["no_charts_in_dashboard"], className="text-muted text-center py-5"), dash.no_update
         
@@ -584,6 +581,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         current_row = []
         error_count = 0
         total_charts = len(chart_ids)
+        logger.info(f"开始渲染仪表盘图表 [ID: {dashboard_id}, 图表数: {total_charts}]")
         
         for i, chart_id in enumerate(chart_ids):
             chart_config = chart_map.get(chart_id)
@@ -781,7 +779,8 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                         date_field_used = date_field_or_error
                         # 检查筛选后的数据是否为空
                         if filtered_count == 0 and original_count > 0:
-                            filter_warning = f"时间筛选后无数据（筛选字段: {date_field_used}）"
+                            texts = language_manager.get_all_texts()
+                            filter_warning = texts["time_filter_no_data"].format(date_field_used)
                         elif filtered_count < original_count:
                             # 数据被筛选了，但不为空，可以选择显示筛选信息（可选）
                             pass
@@ -850,12 +849,14 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 # 添加筛选提示
                 filter_badge = None
                 if is_filter_source:
-                    filter_badge = dbc.Badge("筛选源", color="primary", className="ms-2")
+                    texts = language_manager.get_all_texts()
+                    filter_badge = dbc.Badge(texts["filter_source"], color="primary", className="ms-2")
                 elif is_filtered:
                     filter_field = filter_state.get('field')
                     filter_value = filter_state.get('value')
+                    texts = language_manager.get_all_texts()
                     filter_badge = dbc.Badge(
-                        f"已筛选: {filter_field}={filter_value}", 
+                        texts["filtered"].format(filter_field, filter_value), 
                         color="info", 
                         className="ms-2"
                     )
@@ -924,8 +925,10 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 error_msg = str(e)
                 error_detail = traceback.format_exc()
                 chart_title_for_error = chart_config.get('title', chart_config.get('name', f'图表 {chart_id}'))
-                print(f"[仪表盘] 加载图表失败 (ID: {chart_id}, 名称: {chart_title_for_error}): {error_msg}")
-                print(f"[仪表盘] 错误详情:\n{error_detail}")
+                logger.error(
+                    f"加载图表失败 [ID: {chart_id}, 名称: {chart_title_for_error}]: {error_msg}",
+                    exc_info=True
+                )
                 
                 error_card = dbc.Card(
                     [
@@ -1054,9 +1057,16 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             existing = config_manager.get_dashboard(current_id)
             if existing:
                 dashboard_config["chart_ids"] = existing.get('chart_ids', [])
+            logger.info(f"用户保存仪表盘（编辑） [ID: {current_id}, 名称: {name}]")
+        else:
+            logger.info(f"用户保存仪表盘（新建） [名称: {name}]")
         
-        config_manager.save_dashboard(dashboard_config)
-        saved_id = dashboard_config.get('id')
+        if config_manager.save_dashboard(dashboard_config):
+            saved_id = dashboard_config.get('id')
+            logger.info(f"仪表盘保存成功 [ID: {saved_id}]")
+        else:
+            logger.error(f"仪表盘保存失败 [名称: {name}]")
+            saved_id = dashboard_config.get('id')
         
         return callback_context.triggered[0]["value"] + 1 if callback_context.triggered else 1, saved_id, dashboard_config
 
@@ -1073,17 +1083,18 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         if not dashboard_id:
             return dash.no_update, dash.no_update, dash.no_update
         
-        dashboards = config_manager.load_dashboards()
-        dashboards = [db for db in dashboards if db.get('id') != dashboard_id]
-        
-        with open(config_manager.dashboards_file, 'w', encoding='utf-8') as f:
-            json.dump({'dashboards': dashboards}, f, indent=2, ensure_ascii=False)
+        logger.info(f"用户删除仪表盘 [ID: {dashboard_id}]")
+        if config_manager.delete_dashboard(dashboard_id):
+            logger.info(f"仪表盘删除成功 [ID: {dashboard_id}]")
+        else:
+            logger.error(f"仪表盘删除失败 [ID: {dashboard_id}]")
         
         return callback_context.triggered[0]["value"] + 1 if callback_context.triggered else 1, None, None
 
     @app.callback(
         [Output("modal-add-chart-to-dashboard", "is_open"),
          Output("chart-selector-for-dashboard", "options"),
+         Output("chart-selector-for-dashboard", "value"),
          Output("current-dashboard-config", "data", allow_duplicate=True),
          Output("dashboard-add-chart-status", "children", allow_duplicate=True)],
         [Input("btn-add-chart-to-dashboard", "n_clicks"),
@@ -1098,7 +1109,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
         """打开/关闭添加图表模态框"""
         ctx = callback_context
         if not ctx.triggered:
-            return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
         trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
         
@@ -1110,32 +1121,79 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             ]
             if not options:
                 options = [{"label": "暂无可用图表，请先创建图表", "value": None, "disabled": True}]
-            return True, options, dash.no_update, dash.no_update
+            # 打开模态框时清除之前的状态消息和选择器的值
+            return True, options, None, dash.no_update, []
         
         elif trigger_id == "btn-cancel-add-chart":
-            return False, dash.no_update, dash.no_update, dash.no_update
+            # 关闭模态框时清除状态消息
+            return False, dash.no_update, dash.no_update, dash.no_update, []
         
         elif trigger_id == "btn-confirm-add-chart":
             if selected_chart_id and dashboard_config:
-                chart_ids = dashboard_config.get('chart_ids', [])
+                dashboard_id = dashboard_config.get('id')
+                if not dashboard_id:
+                    texts = language_manager.get_all_texts()
+                    return False, dash.no_update, dash.no_update, dash.no_update, dbc.Alert("仪表盘ID不存在", color="warning", className="m-2")
+                
+                # 重新加载最新的仪表盘配置，确保使用最新的数据
+                latest_dashboard = config_manager.get_dashboard(dashboard_id)
+                if not latest_dashboard:
+                    texts = language_manager.get_all_texts()
+                    return False, dash.no_update, dash.no_update, dash.no_update, dbc.Alert("仪表盘不存在", color="warning", className="m-2")
+                
+                chart_ids = latest_dashboard.get('chart_ids', [])
                 if selected_chart_id not in chart_ids:
+                    # 图表不存在，添加到仪表盘
                     chart_ids.append(selected_chart_id)
-                    dashboard_config['chart_ids'] = chart_ids
-                    config_manager.save_dashboard(dashboard_config)
-                    texts = language_manager.get_all_texts()
-                    updated_dashboard = config_manager.get_dashboard(dashboard_config.get('id'))
-                    if updated_dashboard:
-                        return False, dash.no_update, updated_dashboard, dbc.Alert(texts["chart_added_to_dashboard"], color="success", className="m-2")
+                    latest_dashboard['chart_ids'] = chart_ids
+                    if config_manager.save_dashboard(latest_dashboard):
+                        texts = language_manager.get_all_texts()
+                        # 再次加载保存后的配置，确保返回最新数据
+                        updated_dashboard = config_manager.get_dashboard(dashboard_id)
+                        return False, dash.no_update, None, updated_dashboard or latest_dashboard, dbc.Alert(texts["chart_added_to_dashboard"], color="success", className="m-2")
                     else:
-                        return False, dash.no_update, dashboard_config, dbc.Alert(texts["chart_added_to_dashboard"], color="success", className="m-2")
+                        texts = language_manager.get_all_texts()
+                        return False, dash.no_update, dash.no_update, latest_dashboard, dbc.Alert("保存失败", color="danger", className="m-2")
                 else:
+                    # 图表已存在，保持模态框打开并显示警告
                     texts = language_manager.get_all_texts()
-                    return False, dash.no_update, dash.no_update, dbc.Alert(texts["chart_already_in_dashboard"], color="warning", className="m-2")
+                    return True, dash.no_update, dash.no_update, latest_dashboard, dbc.Alert(texts["chart_already_in_dashboard"], color="warning", className="m-2")
             else:
-                return False, dash.no_update, dash.no_update, dbc.Alert("请选择图表和仪表盘", color="warning", className="m-2")
+                texts = language_manager.get_all_texts()
+                return False, dash.no_update, dash.no_update, dash.no_update, dbc.Alert("请选择图表和仪表盘", color="warning", className="m-2")
         
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
+    @app.callback(
+        Output("dashboard-add-chart-status", "children", allow_duplicate=True),
+        Input("chart-selector-for-dashboard", "value"),
+        State("current-dashboard-config", "data"),
+        prevent_initial_call=True
+    )
+    def check_chart_status(selected_chart_id, dashboard_config):
+        """检查选中图表是否已添加到仪表盘，并实时更新提示信息"""
+        if not selected_chart_id or not dashboard_config:
+            return []
+        
+        dashboard_id = dashboard_config.get('id')
+        if not dashboard_id:
+            return []
+        
+        # 重新加载最新的仪表盘配置，确保使用最新的数据
+        latest_dashboard = config_manager.get_dashboard(dashboard_id)
+        if not latest_dashboard:
+            return []
+        
+        chart_ids = latest_dashboard.get('chart_ids', [])
+        texts = language_manager.get_all_texts()
+        
+        if selected_chart_id in chart_ids:
+            # 图表已存在，显示警告
+            return dbc.Alert(texts["chart_already_in_dashboard"], color="warning", className="m-2")
+        else:
+            # 图表未添加，显示提示或返回空
+            return []
+    
     @app.callback(
         [Output("dashboard-refresh-trigger", "data", allow_duplicate=True),
          Output("current-dashboard-config", "data", allow_duplicate=True)],
@@ -1247,8 +1305,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     fig = chart_engine.create_chart(df, chart_config_for_engine)
                     figures_with_titles.append((fig, chart_title, chart_type))
                 except Exception as e:
-                    print(f"生成图表 {chart_id} 时出错: {str(e)}")
-                    traceback.print_exc()
+                    logger.error(f"生成图表失败 [ID: {chart_id}]: {str(e)}", exc_info=True)
                     continue
             
             if not figures_with_titles:
@@ -1278,8 +1335,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     import traceback
                     error_msg = str(e)
                     error_trace = traceback.format_exc()
-                    print(f"PNG导出失败: {error_msg}")
-                    print(error_trace)
+                    logger.error(f"PNG导出失败: {error_msg}", exc_info=True)
                     alert = dbc.Alert(
                         f"PNG导出失败：{error_msg}。请安装以下库之一：imgkit（需要wkhtmltopdf）、playwright 或 kaleido。",
                         color="danger",
@@ -1330,8 +1386,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     import traceback
                     error_msg = str(e)
                     error_trace = traceback.format_exc()
-                    print(f"HTML导出失败: {error_msg}")
-                    print(error_trace)
+                    logger.error(f"HTML导出失败: {error_msg}", exc_info=True)
                     alert = dbc.Alert(f"HTML导出失败：{error_msg}", color="danger", className="m-2")
                     return {
                         "message": alert,
@@ -1344,8 +1399,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             import traceback
             error_msg = str(e)
             error_trace = traceback.format_exc()
-            print(f"导出仪表盘时发生错误: {error_msg}")
-            print(error_trace)
+            logger.error(f"导出仪表盘时发生错误: {error_msg}", exc_info=True)
             alert = dbc.Alert(f"导出失败：{error_msg}。请检查控制台日志获取详细信息。", color="danger", className="m-2")
             return {
                 "message": alert,
@@ -1403,6 +1457,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 mode = current_mode or "filter"
         
         # 更新按钮状态和提示文字
+        texts = language_manager.get_all_texts()
         if mode == "filter":
             return (
                 "filter",
@@ -1410,7 +1465,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 False,
                 "secondary",
                 True,
-                "当前模式：筛选模式 - 左键点击图表数据点可筛选其他图表"
+                texts["current_mode_filter"]
             )
         else:
             return (
@@ -1419,7 +1474,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                 True,
                 "primary",
                 False,
-                "当前模式：下钻模式 - 左键点击图表数据点可查看详细数据"
+                texts["current_mode_drill_down"]
             )
     
     @app.callback(
@@ -1571,13 +1626,12 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             import traceback
             error_msg = str(e)
             error_trace = traceback.format_exc()
-            print(f"处理图表点击事件时出错: {error_msg}")
-            print(error_trace)
+            logger.error(f"处理图表点击事件时出错: {error_msg}", exc_info=True)
             # 确保异常时也返回正确数量的值
             try:
                 return dash.no_update, dash.no_update, dash.no_update
             except Exception as ret_error:
-                print(f"返回默认值时出错: {str(ret_error)}")
+                logger.error(f"返回默认值时出错: {str(ret_error)}", exc_info=True)
                 # 最后的兜底返回
                 return None, {}, None
 
@@ -1611,12 +1665,12 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             charts = config_manager.load_charts()
             chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
             source_chart = chart_map.get(source_chart_id)
-            source_chart_name = source_chart.get('name', source_chart.get('title', '图表')) if source_chart else f"图表 {source_chart_id}"
-            
+            texts = language_manager.get_all_texts()
+            source_chart_name = source_chart.get('name', source_chart.get('title', texts["chart"])) if source_chart else f"{texts['chart']} {source_chart_id}"
             status_badge = dbc.Badge(
                 [
                     html.I(className="fas fa-filter me-1"),
-                    f"筛选中: {source_chart_name} - {filter_field}={filter_value}",
+                    texts["filtering"].format(source_chart_name, filter_field, filter_value),
                 ],
                 color="info",
                 className="ms-2"
@@ -1643,12 +1697,13 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
             charts = config_manager.load_charts()
             chart_map = {chart.get('id'): chart for chart in charts if chart.get('id')}
             source_chart = chart_map.get(source_chart_id)
-            source_chart_name = source_chart.get('name', source_chart.get('title', '图表')) if source_chart else f"图表 {source_chart_id}"
+            texts = language_manager.get_all_texts()
+            source_chart_name = source_chart.get('name', source_chart.get('title', texts["chart"])) if source_chart else f"{texts['chart']} {source_chart_id}"
             
             status_badge = dbc.Badge(
                 [
                     html.I(className="fas fa-filter me-1"),
-                    f"筛选中: {source_chart_name} - {filter_field}={filter_value}",
+                    texts["filtering"].format(source_chart_name, filter_field, filter_value),
                 ],
                 color="info",
                 className="ms-2"
@@ -1673,31 +1728,33 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
     def handle_drill_down(drill_down_trigger, close_clicks, back_clicks, is_open, dashboard_config, data_cache, drill_down_data):
         """处理图表下钻事件，显示数据下钻详情"""
         ctx = callback_context
+        logger.debug("处理数据下钻事件")
+        texts = language_manager.get_all_texts()
         if not ctx.triggered:
-            return False, None, html.P("无数据", className="text-muted text-center py-5")
+            return False, None, html.P(texts["no_data"], className="text-muted text-center py-5")
         
         triggered_id = ctx.triggered[0]["prop_id"]
         
         # 如果点击关闭或返回按钮
         if "btn-close-drill-down-modal" in triggered_id or "btn-drill-down-back" in triggered_id:
-            return False, None, html.P("无数据", className="text-muted text-center py-5")
+            return False, None, html.P(texts["no_data"], className="text-muted text-center py-5")
         
         # 如果是下钻触发
         if "drill-down-trigger" in triggered_id and drill_down_trigger:
             if not dashboard_config:
-                return False, None, html.P("无数据", className="text-muted text-center py-5")
+                return False, None, html.P(texts["no_data"], className="text-muted text-center py-5")
             
             try:
                 chart_id = drill_down_trigger.get("chart_id")
                 click_data = drill_down_trigger.get("click_data")
                 
                 if not chart_id or not click_data:
-                    return False, None, html.P("无数据", className="text-muted text-center py-5")
+                    return False, None, html.P(texts["no_data"], className="text-muted text-center py-5")
                 
                 # 验证图表ID是否在仪表盘中
                 chart_ids = dashboard_config.get('chart_ids', [])
                 if chart_id not in chart_ids:
-                    return False, None, html.P("无数据", className="text-muted text-center py-5")
+                    return False, None, html.P(texts["no_data"], className="text-muted text-center py-5")
                 
                 # 执行下钻逻辑
                 try:
@@ -1707,7 +1764,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     chart_config = chart_map.get(chart_id)
                     
                     if not chart_config:
-                        return False, None, html.P("图表配置不存在", className="text-muted text-center py-5")
+                        return False, None, html.P(texts["chart_not_found"], className="text-muted text-center py-5")
                     
                     # 获取原始数据
                     original_data = None
@@ -1727,15 +1784,15 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                                     adapter = data_source_manager.get_adapter(datasource_id, ds_config) or DataSourceAdapter(ds_config)
                                     original_data = adapter.fetch_data(limit=1000)
                         except Exception as e:
-                            print(f"加载原始数据失败: {str(e)}")
+                            logger.warning(f"加载原始数据失败 [数据源ID: {datasource_id}]: {str(e)}", exc_info=True)
                     
                     if original_data is None or original_data.empty:
-                        return True, None, dbc.Alert("无法加载原始数据", color="warning")
+                        return True, None, dbc.Alert(texts["cannot_load_original_data"], color="warning")
                     
                     # 从点击数据中提取筛选条件
                     points = click_data.get('points', [])
                     if not points:
-                        return False, None, html.P("无数据点", className="text-muted text-center py-5")
+                        return False, None, html.P(texts["no_data_points"], className="text-muted text-center py-5")
                     
                     point = points[0]
                     chart_type = chart_config.get('type', 'line')
@@ -1745,7 +1802,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     
                     # 确定筛选字段和值
                     filter_conditions = {}
-                    drill_down_title = "数据详情"
+                    drill_down_title = texts["data_details"]
                     
                     if chart_type in ['bar', 'line', 'combo']:
                         # 对于柱状图和折线图，下钻显示该X值对应的所有详细数据
@@ -1753,7 +1810,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                             filter_value = point['x']
                             if x_field and x_field in original_data.columns:
                                 filter_conditions[x_field] = filter_value
-                                drill_down_title = f"{x_field} = {filter_value} 的详细数据"
+                                drill_down_title = texts["drill_down_detail_data"].format(x_field, filter_value)
                     elif chart_type == 'pie':
                         # 对于饼图，下钻显示该分类的所有详细数据
                         if 'label' in point and point['label'] is not None:
@@ -1761,7 +1818,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                             filter_field = group_field or x_field
                             if filter_field and filter_field in original_data.columns:
                                 filter_conditions[filter_field] = filter_value
-                                drill_down_title = f"{filter_field} = {filter_value} 的详细数据"
+                                drill_down_title = texts["drill_down_detail_data"].format(filter_field, filter_value)
                     
                     # 应用筛选条件
                     filtered_data: pd.DataFrame = original_data.copy()
@@ -1795,7 +1852,7 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     # 构建下钻内容
                     drill_content = [
                         html.H5(drill_down_title, className="mb-3"),
-                        html.P(f"共找到 {len(filtered_data)} 条记录（最多显示100条）", className="text-muted mb-3"),
+                        html.P(texts["drill_down_records_found"].format(len(filtered_data)), className="text-muted mb-3"),
                         table,
                     ]
                     
@@ -1812,17 +1869,15 @@ def register_dashboard_callbacks(app, config_manager, data_source_manager, chart
                     import traceback
                     error_msg = str(e)
                     error_trace = traceback.format_exc()
-                    print(f"处理数据下钻时发生错误: {error_msg}")
-                    print(error_trace)
-                    return True, None, dbc.Alert(f"处理数据下钻时发生错误: {error_msg}", color="danger")
+                    logger.error(f"处理数据下钻时发生错误: {error_msg}", exc_info=True)
+                    return True, None, dbc.Alert(texts["drill_down_error"].format(error_msg), color="danger")
                     
             except Exception as e:
                 import traceback
                 error_msg = str(e)
                 error_trace = traceback.format_exc()
-                print(f"处理右键点击下钻时发生错误: {error_msg}")
-                print(error_trace)
-                return True, None, dbc.Alert(f"处理数据下钻时发生错误: {error_msg}", color="danger")
+                logger.error(f"处理右键点击下钻时发生错误: {error_msg}", exc_info=True)
+                return True, None, dbc.Alert(texts["drill_down_error"].format(error_msg), color="danger")
         
         return dash.no_update, dash.no_update, dash.no_update
     

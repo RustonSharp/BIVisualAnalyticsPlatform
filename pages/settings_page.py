@@ -3,6 +3,9 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback_context
 import dash
 from language_manager import language_manager
+from logger import get_logger
+
+logger = get_logger('settings_page')
 
 
 def create_settings_page():
@@ -241,7 +244,11 @@ def register_settings_callbacks(app):
             return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
         
         # 保存语言设置
-        language_manager.save_language(new_lang)
+        logger.info(f"用户切换语言: {current_lang} -> {new_lang}")
+        if language_manager.save_language(new_lang):
+            logger.info(f"语言设置保存成功: {new_lang}")
+        else:
+            logger.error(f"语言设置保存失败: {new_lang}")
         
         # 获取新语言的文本
         texts = language_manager.get_all_texts(new_lang)

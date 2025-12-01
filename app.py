@@ -6,6 +6,13 @@ from dash import dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 from pathlib import Path
 
+# 初始化日志系统（必须在其他导入之前）
+from logger import get_logger
+logger = get_logger('app')
+logger.info("=" * 60)
+logger.info("BI 数据可视化与分析平台启动")
+logger.info("=" * 60)
+
 # 导入核心模块
 from config_manager import ConfigManager
 from data_adapter import DataSourceManager
@@ -46,15 +53,18 @@ app.index_string = get_index_string()
 # ==========================================
 # 初始化核心模块
 # ==========================================
+logger.info("初始化核心模块...")
 config_manager = ConfigManager()
 data_source_manager = DataSourceManager()
 chart_engine = ChartEngine()
+logger.info("核心模块初始化完成")
 
 # 创建必要的目录
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 EXPORT_DIR = Path("exports")
 EXPORT_DIR.mkdir(exist_ok=True)
+logger.debug(f"创建目录: uploads={UPLOAD_DIR.exists()}, exports={EXPORT_DIR.exists()}")
 
 # ==========================================
 # 主布局
@@ -64,6 +74,7 @@ from language_manager import language_manager
 
 # 初始化时加载语言设置
 initial_language = language_manager.load_language()
+logger.info(f"加载语言设置: {initial_language}")
 
 app.layout = html.Div(
     [
@@ -129,18 +140,24 @@ def display_page(pathname, language):
 # ==========================================
 # 注册所有页面的回调函数
 # ==========================================
+logger.info("注册页面回调函数...")
 # 注册数据源页面回调
 register_datasource_callbacks(app, config_manager, data_source_manager, UPLOAD_DIR)
+logger.debug("数据源页面回调已注册")
 
 # 注册图表设计器页面回调
 register_chart_designer_callbacks(app, config_manager, data_source_manager, chart_engine, EXPORT_DIR)
+logger.debug("图表设计器页面回调已注册")
 
 # 注册仪表盘页面回调
 register_dashboard_callbacks(app, config_manager, data_source_manager, chart_engine, EXPORT_DIR)
+logger.debug("仪表盘页面回调已注册")
 
 # 注册设置页面回调
 from pages.settings_page import register_settings_callbacks
 register_settings_callbacks(app)
+logger.debug("设置页面回调已注册")
+logger.info("所有页面回调函数注册完成")
 
 # ==========================================
 # 语言切换全局回调
@@ -162,6 +179,7 @@ def update_all_pages_on_language_change(language, pathname):
     """语言变化时更新所有页面和侧边栏"""
     # 确保语言管理器使用正确的语言
     if language and language in ["zh", "en"]:
+        logger.info(f"语言切换: {language}")
         language_manager.set_language(language)
     else:
         # 如果 language 无效，使用语言管理器的当前值
@@ -196,4 +214,6 @@ def update_all_pages_on_language_change(language, pathname):
 # 启动应用
 # ==========================================
 if __name__ == "__main__":
+    logger.info("启动Dash服务器: http://0.0.0.0:8050")
+    logger.info("调试模式: 开启")
     app.run_server(debug=True, port=8050)

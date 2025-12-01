@@ -188,6 +188,7 @@ LANGUAGE_TEXTS = {
         "chart_type_colon": "类型: {}",
         "created_colon": "创建: {}",
         "unnamed_chart": "未命名图表",
+        "chart": "图表",
         "drag_field_to_x_axis": "请将字段拖拽到 X 轴",
         "add_y_axis_field_first": "请先添加Y轴字段",
         "at_least_one_y_axis": "请至少选择一个 Y 轴字段",
@@ -216,6 +217,11 @@ LANGUAGE_TEXTS = {
         "filter_mode": "筛选模式",
         "drill_down_mode": "下钻模式",
         "current_mode_filter": "当前模式：筛选模式 - 左键点击图表数据点可筛选其他图表",
+        "current_mode_drill_down": "当前模式：下钻模式 - 左键点击图表数据点可查看详细数据",
+        "filter_source": "筛选源",
+        "filtered": "已筛选: {}={}",
+        "filtering": "筛选中: {} - {}={}",
+        "time_filter_no_data": "时间筛选后无数据（筛选字段: {}）",
         "clear_filter": "清除筛选",
         "share_link": "分享链接",
         "all": "全部",
@@ -236,6 +242,16 @@ LANGUAGE_TEXTS = {
         "chart_added_to_dashboard": "图表已添加到仪表盘",
         "chart_already_in_dashboard": "该图表已存在于仪表盘中",
         "data_drill_down_details": "数据下钻详情",
+        "back": "返回",
+        "close": "关闭",
+        "loading_drill_down_data": "正在加载详细数据...",
+        "no_data": "无数据",
+        "data_details": "数据详情",
+        "drill_down_detail_data": "{} = {} 的详细数据",
+        "drill_down_records_found": "共找到 {} 条记录（最多显示100条）",
+        "drill_down_error": "处理数据下钻时发生错误: {}",
+        "cannot_load_original_data": "无法加载原始数据",
+        "no_data_points": "无数据点",
         "no_date_field_found": "未找到日期字段，无法应用时间筛选",
         "date_field_conversion_failed": "日期字段转换失败: {}",
         "date_format_error_parse": "日期格式错误: 无法解析日期",
@@ -458,6 +474,7 @@ LANGUAGE_TEXTS = {
         "chart_type_colon": "Type: {}",
         "created_colon": "Created: {}",
         "unnamed_chart": "Unnamed Chart",
+        "chart": "Chart",
         "drag_field_to_x_axis": "Please drag fields to the X axis",
         "add_y_axis_field_first": "Please add Y-axis fields first",
         "at_least_one_y_axis": "Please select at least one Y-axis field",
@@ -486,6 +503,11 @@ LANGUAGE_TEXTS = {
         "filter_mode": "Filter Mode",
         "drill_down_mode": "Drill Down Mode",
         "current_mode_filter": "Current mode: Filter mode - Left-click chart data points to filter other charts",
+        "current_mode_drill_down": "Current mode: Drill-down mode - Left-click chart data points to view detailed data",
+        "filter_source": "Filter Source",
+        "filtered": "Filtered: {}={}",
+        "filtering": "Filtering: {} - {}={}",
+        "time_filter_no_data": "No data after time filter (filter field: {})",
         "clear_filter": "Clear Filter",
         "share_link": "Share Link",
         "all": "All",
@@ -506,6 +528,16 @@ LANGUAGE_TEXTS = {
         "chart_added_to_dashboard": "Chart added to dashboard",
         "chart_already_in_dashboard": "This chart already exists in the dashboard",
         "data_drill_down_details": "Data Drill Down Details",
+        "back": "Back",
+        "close": "Close",
+        "loading_drill_down_data": "Loading detailed data...",
+        "no_data": "No Data",
+        "data_details": "Data Details",
+        "drill_down_detail_data": "Detailed data for {} = {}",
+        "drill_down_records_found": "Found {} records (showing up to 100)",
+        "drill_down_error": "Error processing drill-down: {}",
+        "cannot_load_original_data": "Cannot load original data",
+        "no_data_points": "No data points",
         "no_date_field_found": "No date field found, unable to apply time filter",
         "date_field_conversion_failed": "Date field conversion failed: {}",
         "date_format_error_parse": "Date format error: Unable to parse date",
@@ -576,7 +608,7 @@ class LanguageManager:
                     lang = config.get('language', DEFAULT_LANGUAGE)
                     return lang
             except Exception as e:
-                print(f"Error loading language config: {e}")
+                logger.error(f"加载语言配置失败: {e}", exc_info=True)
                 return DEFAULT_LANGUAGE
         return DEFAULT_LANGUAGE
     
@@ -589,7 +621,7 @@ class LanguageManager:
             self._current_language = language
             return True
         except Exception as e:
-            print(f"Error saving language config: {e}")
+            logger.error(f"保存语言配置失败: {e}", exc_info=True)
             return False
     
     def set_language(self, language: str) -> None:

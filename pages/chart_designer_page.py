@@ -10,6 +10,9 @@ from components.common import default_chart_assignments, render_assigned_fields,
 from data_adapter import DataSourceAdapter
 import pandas as pd
 from language_manager import language_manager
+from logger import get_logger
+
+logger = get_logger('chart_designer_page')
 
 
 def create_chart_designer_page():
@@ -1370,8 +1373,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     "agg_functions": field_agg_functions or {},  # 各字段的聚合函数配置
                 }
                 fig = chart_engine.create_chart(df, chart_config)
+                logger.debug(f"图表预览生成成功 [类型: {chart_type}, 数据行数: {len(df)}]")
                 return dcc.Graph(figure=fig, id="preview-chart")
         except Exception as e:
+            logger.error(f"图表预览生成失败 [类型: {chart_type}]: {str(e)}", exc_info=True)
             return dbc.Alert(f"{texts['generate_chart_failed']}：{str(e)}", color="danger")
 
     @app.callback(
@@ -1439,7 +1444,10 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             if editing_id:
                 chart_config['id'] = editing_id
             
-            config_manager.save_chart(chart_config)
+            if config_manager.save_chart(chart_config):
+                logger.info(f"用户保存图表 [ID: {chart_config.get('id')}, 名称: {chart_name}, 类型: {chart_type}]")
+            else:
+                logger.error(f"保存图表失败 [ID: {chart_config.get('id')}]")
             
             # 重新加载图表列表
             charts = config_manager.load_charts()

@@ -16,6 +16,9 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 import requests
+from logger import get_logger, log_performance
+
+logger = get_logger('load_data')
 
 
 # --------------------------------------------
@@ -23,6 +26,7 @@ import requests
 # --------------------------------------------
 
 
+@log_performance
 def load_from_file(file_path: str, file_type: Optional[str] = None) -> pd.DataFrame:
 	"""Load data from a local CSV or Excel file.
 
@@ -34,6 +38,7 @@ def load_from_file(file_path: str, file_type: Optional[str] = None) -> pd.DataFr
 		Optional hint: "csv", "xlsx", or "excel". If omitted,
 		the type will be inferred from file extension.
 	"""
+	logger.debug(f"加载文件 [路径: {file_path}, 类型: {file_type}]")
 
 	if file_type is None:
 		lower = file_path.lower()
@@ -42,14 +47,23 @@ def load_from_file(file_path: str, file_type: Optional[str] = None) -> pd.DataFr
 		elif lower.endswith(".xls") or lower.endswith(".xlsx"):
 			file_type = "excel"
 		else:
-			raise ValueError("Cannot infer file type, please specify 'csv' or 'excel'.")
+			error_msg = "Cannot infer file type, please specify 'csv' or 'excel'."
+			logger.error(f"无法推断文件类型: {file_path}")
+			raise ValueError(error_msg)
 
-	if file_type == "csv":
-		return pd.read_csv(file_path)
-	if file_type in {"xlsx", "xls", "excel"}:
-		return pd.read_excel(file_path)
-
-	raise ValueError(f"Unsupported file_type: {file_type}")
+	try:
+		if file_type == "csv":
+			df = pd.read_csv(file_path)
+		elif file_type in {"xlsx", "xls", "excel"}:
+			df = pd.read_excel(file_path)
+		else:
+			raise ValueError(f"Unsupported file_type: {file_type}")
+		
+		logger.info(f"文件加载成功 [路径: {file_path}, 类型: {file_type}, 行数: {len(df)}, 列数: {len(df.columns)}]")
+		return df
+	except Exception as e:
+		logger.error(f"文件加载失败 [路径: {file_path}, 类型: {file_type}]: {e}", exc_info=True)
+		raise
 
 
 # --------------------------------------------
@@ -99,11 +113,17 @@ def load_from_database(config: DBConfig, sql: str) -> pd.DataFrame:
 
 	from sqlalchemy import create_engine  # imported lazily
 
-	url = config.to_sqlalchemy_url()
-	engine = create_engine(url)
-	with engine.connect() as conn:
-		df = pd.read_sql(sql, conn)
-	return df
+	logger.debug(f"从数据库加载数据 [引擎: {config.engine}, 数据库: {config.database}, SQL: {sql[:50]}...]")
+	try:
+		url = config.to_sqlalchemy_url()
+		engine = create_engine(url)
+		with engine.connect() as conn:
+			df = pd.read_sql(sql, conn)
+		logger.info(f"数据库数据加载成功 [引擎: {config.engine}, 数据库: {config.database}, 行数: {len(df)}, 列数: {len(df.columns)}]")
+		return df
+	except Exception as e:
+		logger.error(f"数据库数据加载失败 [引擎: {config.engine}, 数据库: {config.database}]: {e}", exc_info=True)
+		raise
 
 
 # --------------------------------------------
@@ -111,6 +131,7 @@ def load_from_database(config: DBConfig, sql: str) -> pd.DataFrame:
 # --------------------------------------------
 
 
+@log_performance
 def load_from_api(
 	url: str,
 	method: str = "GET",
@@ -125,31 +146,41 @@ def load_from_api(
 	- a dict containing a top-level list under a key like
 	  "data" or "results" (simple heuristics).
 	"""
+	logger.debug(f"从API加载数据 [URL: {url}, 方法: {method}]")
+	try:
+		method = method.upper()
+		if method == "GET":
+			resp = requests.get(url, params=params, headers=headers, timeout=30)
+		elif method == "POST":
+			resp = requests.post(url, params=params, headers=headers, json=json_body, timeout=30)
+		else:
+			raise ValueError("Only GET and POST are supported for now.")
 
-	method = method.upper()
-	if method == "GET":
-		resp = requests.get(url, params=params, headers=headers, timeout=30)
-	elif method == "POST":
-		resp = requests.post(url, params=params, headers=headers, json=json_body, timeout=30)
-	else:
-		raise ValueError("Only GET and POST are supported for now.")
+		resp.raise_for_status()
+		data = resp.json()
 
-	resp.raise_for_status()
-	data = resp.json()
+		# If it's already a list, treat it directly as rows
+		if isinstance(data, list):
+			df = pd.DataFrame(data)
+			logger.info(f"API数据加载成功 [URL: {url}, 行数: {len(df)}, 列数: {len(df.columns)}]")
+			return df
 
-	# If it's already a list, treat it directly as rows
-	if isinstance(data, list):
-		return pd.DataFrame(data)
+		# If it's a dict, try to find list-like value under common keys
+		if isinstance(data, dict):
+			for key in ("data", "results", "items", "rows"):
+				value = data.get(key)
+				if isinstance(value, list):
+					df = pd.DataFrame(value)
+					logger.info(f"API数据加载成功 [URL: {url}, 行数: {len(df)}, 列数: {len(df.columns)}]")
+					return df
 
-	# If it's a dict, try to find list-like value under common keys
-	if isinstance(data, dict):
-		for key in ("data", "results", "items", "rows"):
-			value = data.get(key)
-			if isinstance(value, list):
-				return pd.DataFrame(value)
-
-	# Fallback: let pandas try to normalize
-	return pd.json_normalize(data)
+		# Fallback: let pandas try to normalize
+		df = pd.json_normalize(data)
+		logger.info(f"API数据加载成功 [URL: {url}, 行数: {len(df)}, 列数: {len(df.columns)}]")
+		return df
+	except Exception as e:
+		logger.error(f"API数据加载失败 [URL: {url}, 方法: {method}]: {e}", exc_info=True)
+		raise
 
 
 __all__ = [
