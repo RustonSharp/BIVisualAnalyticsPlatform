@@ -6,6 +6,9 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
+from logger import get_logger
+
+logger = get_logger('language_manager')
 
 # 语言配置文件路径
 LANGUAGE_CONFIG_FILE = Path("config/language.json")

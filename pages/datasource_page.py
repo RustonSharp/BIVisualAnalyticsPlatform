@@ -9,7 +9,7 @@ from pathlib import Path
 
 from components.common import create_table_from_dataframe
 from data_adapter import DataSourceAdapter
-from load_data import load_from_file, DBConfig, load_from_database, load_from_api
+from tools import load_from_file, DBConfig, load_from_database, load_from_api
 from language_manager import language_manager
 from logger import get_logger
 
@@ -498,9 +498,9 @@ def register_datasource_callbacks(app, config_manager, data_source_manager, uplo
                     config["id"] = current_id
                 
             elif active_tab == "tab-database":
+                texts = language_manager.get_all_texts()
                 if not all([db_host, db_database, db_user, db_password]):
                     datasources = config_manager.load_datasources()
-                    texts = language_manager.get_all_texts()
                     return create_datasource_table(datasources), dbc.Alert(texts["fill_database_info"], color="warning", className="m-3"), False
                 
                 name = name_db or f"{db_type}_{db_database}"

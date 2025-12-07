@@ -13,7 +13,7 @@
 
 ## 数据源配置
 
-数据源配置文件：`datasource_config.yaml` 或 `config/datasources.yaml`
+数据源配置文件：`examples/datasource_config.yaml` 或 `config/datasources.yaml`
 
 ### 1. 本地文件数据源
 
@@ -107,7 +107,7 @@
 
 ## 图表配置
 
-图表配置文件：`chart_config.json` 或 `config/charts.json`
+图表配置文件：`examples/chart_config.json` 或 `config/charts.json`
 
 ### 基本配置结构
 
@@ -371,7 +371,7 @@ datasources:
 
 ### Q1: 如何配置数据库连接？
 
-A: 在 `datasource_config.yaml` 中添加数据库配置，确保：
+A: 在 `examples/datasource_config.yaml` 或 `config/datasources.yaml` 中添加数据库配置，确保：
 1. 数据库服务正在运行
 2. 网络连接正常
 3. 用户名和密码正确
@@ -417,8 +417,8 @@ A: 支持以下聚合函数：
 
 ## 更多资源
 
-- 查看 `datasource_config.yaml` 获取完整的数据源配置示例
-- 查看 `chart_config.json` 获取完整的图表配置示例
+- 查看 `examples/datasource_config.yaml` 获取完整的数据源配置示例
+- 查看 `examples/chart_config.json` 获取完整的图表配置示例
 - 查看 `README-CN.md` 获取平台使用指南
 
 ---

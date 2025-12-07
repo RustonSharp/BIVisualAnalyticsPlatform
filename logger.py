@@ -10,6 +10,29 @@ from datetime import datetime
 from typing import Optional, cast
 
 
+class SafeTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
+    """
+    安全的定时轮转文件处理器
+    处理 Windows 文件锁定问题，避免轮转失败影响主程序
+    """
+    
+    def doRollover(self):
+        """
+        执行日志轮转，捕获 Windows 文件锁定异常
+        """
+        try:
+            super().doRollover()
+        except (OSError, PermissionError) as e:
+            # Windows 文件锁定错误，记录但不影响主程序
+            # 使用 stderr 输出，因为文件日志可能无法写入
+            print(
+                f"警告: 日志文件轮转失败 (文件可能被其他程序占用): {e}",
+                file=sys.stderr
+            )
+            # 尝试继续使用当前文件，而不是抛出异常
+            # 这样即使轮转失败，日志记录仍能继续
+
+
 class LoggerManager:
     """日志管理器"""
     
@@ -61,12 +84,13 @@ class LoggerManager:
         
         # 2. 文件处理器 - 所有级别，按日期轮转
         log_file = log_dir / "app.log"
-        file_handler = logging.handlers.TimedRotatingFileHandler(
+        file_handler = SafeTimedRotatingFileHandler(
             filename=str(log_file),
             when='midnight',
             interval=1,
             backupCount=30,  # 保留30天的日志
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True  # 延迟打开文件，直到第一次写入
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
@@ -74,12 +98,13 @@ class LoggerManager:
         
         # 3. 错误日志文件 - 只记录ERROR及以上级别
         error_log_file = log_dir / "error.log"
-        error_handler = logging.handlers.TimedRotatingFileHandler(
+        error_handler = SafeTimedRotatingFileHandler(
             filename=str(error_log_file),
             when='midnight',
             interval=1,
             backupCount=30,
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True  # 延迟打开文件，直到第一次写入
         )
         error_handler.setLevel(logging.ERROR)
         error_handler.setFormatter(detailed_formatter)
@@ -87,12 +112,13 @@ class LoggerManager:
         
         # 4. 性能日志文件 - 记录性能相关信息
         performance_log_file = log_dir / "performance.log"
-        performance_handler = logging.handlers.TimedRotatingFileHandler(
+        performance_handler = SafeTimedRotatingFileHandler(
             filename=str(performance_log_file),
             when='midnight',
             interval=1,
             backupCount=7,  # 性能日志保留7天
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True  # 延迟打开文件，直到第一次写入
         )
         performance_handler.setLevel(logging.INFO)
         performance_handler.setFormatter(detailed_formatter)

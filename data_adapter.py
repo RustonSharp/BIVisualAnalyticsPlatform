@@ -6,9 +6,9 @@
 import pandas as pd
 import os
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 from pathlib import Path
-from load_data import load_from_file, load_from_database, load_from_api, DBConfig
+from tools import load_from_file, load_from_database, load_from_api, DBConfig
 from logger import get_logger, log_performance
 
 logger = get_logger('data_adapter')
@@ -35,20 +35,34 @@ class DataSourceAdapter:
         try:
             if self.type == 'file':
                 file_path = self.config.get('file_path')
-                if not os.path.exists(file_path):
+                if not file_path or not isinstance(file_path, str):
+                    return False
+                file_path_str = cast(str, file_path)
+                if not os.path.exists(file_path_str):
                     return False
                 # 测试读取前几行
-                self._cache = load_from_file(file_path)
+                self._cache = load_from_file(file_path_str)
                 return True
             
             elif self.type == 'database':
+                host = self.config.get('host')
+                user = self.config.get('user')
+                password = self.config.get('password')
+                database = self.config.get('database')
+                
+                if not all([host, user, password, database]):
+                    return False
+                
+                if not all(isinstance(x, str) for x in [host, user, password, database]):
+                    return False
+                
                 db_config = DBConfig(
                     engine=self.config.get('engine', 'postgresql'),
-                    host=self.config.get('host'),
+                    host=cast(str, host),
                     port=self.config.get('port', 5432),
-                    user=self.config.get('user'),
-                    password=self.config.get('password'),
-                    database=self.config.get('database')
+                    user=cast(str, user),
+                    password=cast(str, password),
+                    database=cast(str, database)
                 )
                 # 测试连接
                 from sqlalchemy import create_engine
@@ -61,9 +75,11 @@ class DataSourceAdapter:
             
             elif self.type == 'api':
                 url = self.config.get('url')
+                if not url or not isinstance(url, str):
+                    return False
                 # 简单测试请求
-                response = load_from_api(
-                    url,
+                load_from_api(
+                    cast(str, url),
                     method=self.config.get('method', 'GET'),
                     params=self.config.get('params'),
                     headers=self.config.get('headers')
@@ -88,25 +104,43 @@ class DataSourceAdapter:
         """
         try:
             logger.debug(f"开始获取数据 [类型: {self.type}, 名称: {self.name}, 限制: {limit}]")
+            df: pd.DataFrame
+            
             if self.type == 'file':
                 file_path = self.config.get('file_path')
-                df = load_from_file(file_path)
+                if not file_path or not isinstance(file_path, str):
+                    raise ValueError("文件路径无效或未配置")
+                df = load_from_file(cast(str, file_path))
             
             elif self.type == 'database':
+                host = self.config.get('host')
+                user = self.config.get('user')
+                password = self.config.get('password')
+                database = self.config.get('database')
+                
+                if not all([host, user, password, database]):
+                    raise ValueError("数据库配置不完整")
+                
+                if not all(isinstance(x, str) for x in [host, user, password, database]):
+                    raise ValueError("数据库配置参数类型错误")
+                
                 db_config = DBConfig(
                     engine=self.config.get('engine', 'postgresql'),
-                    host=self.config.get('host'),
+                    host=cast(str, host),
                     port=self.config.get('port', 5432),
-                    user=self.config.get('user'),
-                    password=self.config.get('password'),
-                    database=self.config.get('database')
+                    user=cast(str, user),
+                    password=cast(str, password),
+                    database=cast(str, database)
                 )
-                sql = self.config.get('sql', 'SELECT * FROM ' + self.config.get('table', 'LIMIT 100'))
+                sql = self.config.get('sql', 'SELECT * FROM ' + str(self.config.get('table', 'LIMIT 100')))
                 df = load_from_database(db_config, sql)
             
             elif self.type == 'api':
+                url = self.config.get('url')
+                if not url or not isinstance(url, str):
+                    raise ValueError("API URL 无效或未配置")
                 df = load_from_api(
-                    self.config.get('url'),
+                    cast(str, url),
                     method=self.config.get('method', 'GET'),
                     params=self.config.get('params'),
                     headers=self.config.get('headers'),
@@ -114,6 +148,9 @@ class DataSourceAdapter:
                 )
             else:
                 raise ValueError(f"不支持的数据源类型: {self.type}")
+            
+            # 确保 df 是 DataFrame 类型
+            df = cast(pd.DataFrame, df)
             
             # 应用限制
             if limit:
@@ -124,11 +161,11 @@ class DataSourceAdapter:
                 for col, condition in filters.items():
                     if isinstance(condition, dict):
                         if 'min' in condition:
-                            df = df[df[col] >= condition['min']]
+                            df = cast(pd.DataFrame, df[df[col] >= condition['min']])
                         if 'max' in condition:
-                            df = df[df[col] <= condition['max']]
+                            df = cast(pd.DataFrame, df[df[col] <= condition['max']])
                         if 'values' in condition:
-                            df = df[df[col].isin(condition['values'])]
+                            df = cast(pd.DataFrame, df[df[col].isin(condition['values'])])
             
             self._cache = df
             logger.info(f"数据获取成功 [类型: {self.type}, 名称: {self.name}, 行数: {len(df)}, 列数: {len(df.columns)}]")
@@ -155,22 +192,32 @@ class DataSourceAdapter:
         }
         
         for col in df.columns:
+            col_series = cast(pd.Series, df[col])
             col_info = {
                 'name': col,
-                'dtype': str(df[col].dtype),
-                'type': self._infer_field_type(df[col])
+                'dtype': str(col_series.dtype),
+                'type': self._infer_field_type(col_series)
             }
             
             # 添加统计信息
-            if pd.api.types.is_numeric_dtype(df[col]):
+            if pd.api.types.is_numeric_dtype(col_series):
+                min_val = col_series.min()
+                max_val = col_series.max()
+                mean_val = col_series.mean()
+                # pd.isna 对于标量返回 bool，对于数组返回数组
+                # 这里我们处理的是标量值（min/max/mean 的结果）
+                min_is_na = bool(pd.isna(min_val))  # type: ignore
+                max_is_na = bool(pd.isna(max_val))  # type: ignore
+                mean_is_na = bool(pd.isna(mean_val))  # type: ignore
+                
                 col_info['stats'] = {
-                    'min': float(df[col].min()) if not pd.isna(df[col].min()) else None,
-                    'max': float(df[col].max()) if not pd.isna(df[col].max()) else None,
-                    'mean': float(df[col].mean()) if not pd.isna(df[col].mean()) else None,
+                    'min': None if min_is_na else float(min_val),
+                    'max': None if max_is_na else float(max_val),
+                    'mean': None if mean_is_na else float(mean_val),
                 }
             else:
                 col_info['stats'] = {
-                    'unique_count': int(df[col].nunique())
+                    'unique_count': int(col_series.nunique())
                 }
             
             schema['columns'].append(col_info)
@@ -191,11 +238,43 @@ class DataSourceAdapter:
         if pd.api.types.is_datetime64_any_dtype(series):
             return 'date'
         
-        # 尝试转换为日期
+        # 尝试转换为日期（使用常见格式）
+        sample_data = series.dropna().head(10)
+        if len(sample_data) == 0:
+            return 'text'
+        
+        # 常见日期格式列表（按常见程度排序）
+        common_date_formats = [
+            '%Y-%m-%d',           # 2024-01-01
+            '%Y/%m/%d',           # 2024/01/01
+            '%Y-%m-%d %H:%M:%S',  # 2024-01-01 12:00:00
+            '%Y/%m/%d %H:%M:%S',  # 2024/01/01 12:00:00
+            '%d-%m-%Y',           # 01-01-2024
+            '%d/%m/%Y',           # 01/01/2024
+            '%m-%d-%Y',           # 01-01-2024 (美式)
+            '%m/%d/%Y',           # 01/01/2024 (美式)
+            '%Y年%m月%d日',        # 2024年01月01日
+            '%Y.%m.%d',           # 2024.01.01
+        ]
+        
+        # 先尝试使用 format 参数（避免警告）
+        for date_format in common_date_formats:
+            try:
+                # 检查是否大部分值都能成功解析
+                parsed = pd.to_datetime(sample_data, format=date_format, errors='coerce')
+                if parsed.notna().sum() >= len(sample_data) * 0.8:  # 至少80%能解析
+                    return 'date'
+            except (ValueError, TypeError):
+                continue
+        
+        # 如果指定格式都失败，尝试自动推断（使用 errors='coerce' 避免警告）
+        # 注意：不指定 format 参数时，pandas 会自动推断，但可能产生警告
+        # 使用 errors='coerce' 可以避免抛出异常，无法解析的值会变成 NaT
         try:
-            pd.to_datetime(series.dropna().head(5))
-            return 'date'
-        except:
+            parsed = pd.to_datetime(sample_data, errors='coerce')
+            if parsed.notna().sum() >= len(sample_data) * 0.8:  # 至少80%能解析
+                return 'date'
+        except (ValueError, TypeError):
             pass
         
         # 文本类型

@@ -1,12 +1,12 @@
-"""Data loading utilities for three types of sources:
+"""数据加载工具模块，支持三种数据源类型：
 
-1. Local file upload (CSV / Excel)
-2. Database connection (PostgreSQL / MySQL)
-3. HTTP API endpoint (JSON)
+1. 本地文件上传（CSV / Excel）
+2. 数据库连接（PostgreSQL / MySQL）
+3. HTTP API 接口（JSON）
 
-This module only focuses on data loading logic. You can
-integrate these functions with Streamlit, Dash, or other
-UI frameworks to provide real upload forms / input boxes.
+本模块专注于数据加载逻辑。您可以
+将这些函数与 Streamlit、Dash 或其他
+UI 框架集成，以提供真实的上传表单/输入框。
 """
 
 from __future__ import annotations
@@ -214,5 +214,4 @@ if __name__ == "__main__":
 	# 3) API example
 	# df_api = load_from_api("https://api.example.com/data")
 	# print(df_api.head())
-
 

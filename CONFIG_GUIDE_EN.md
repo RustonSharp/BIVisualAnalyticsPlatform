@@ -13,7 +13,7 @@ This document provides detailed instructions on how to configure datasources and
 
 ## Datasource Configuration
 
-Datasource configuration file: `datasource_config.yaml` or `config/datasources.yaml`
+Datasource configuration file: `examples/datasource_config.yaml` or `config/datasources.yaml`
 
 ### 1. Local File Datasource
 
@@ -107,7 +107,7 @@ Supports GET and POST requests.
 
 ## Chart Configuration
 
-Chart configuration file: `chart_config.json` or `config/charts.json`
+Chart configuration file: `examples/chart_config.json` or `config/charts.json`
 
 ### Basic Configuration Structure
 
@@ -371,7 +371,7 @@ datasources:
 
 ### Q1: How to configure database connection?
 
-A: Add database configuration in `datasource_config.yaml`, ensure:
+A: Add database configuration in `examples/datasource_config.yaml` or `config/datasources.yaml`, ensure:
 1. Database service is running
 2. Network connection is normal
 3. Username and password are correct
@@ -417,8 +417,8 @@ A: The following aggregation functions are supported:
 
 ## Additional Resources
 
-- View `datasource_config.yaml` for complete datasource configuration examples
-- View `chart_config.json` for complete chart configuration examples
+- View `examples/datasource_config.yaml` for complete datasource configuration examples
+- View `examples/chart_config.json` for complete chart configuration examples
 - View `README-CN.md` for platform usage guide
 
 ---
