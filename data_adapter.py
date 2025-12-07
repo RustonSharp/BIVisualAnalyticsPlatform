@@ -6,6 +6,7 @@
 import pandas as pd
 import os
 import json
+import warnings
 from typing import Dict, Any, Optional, List, cast
 from pathlib import Path
 from tools import load_from_file, load_from_database, load_from_api, DBConfig
@@ -245,16 +246,54 @@ class DataSourceAdapter:
         
         # 常见日期格式列表（按常见程度排序）
         common_date_formats = [
+            # ISO 格式（最常见）
             '%Y-%m-%d',           # 2024-01-01
             '%Y/%m/%d',           # 2024/01/01
             '%Y-%m-%d %H:%M:%S',  # 2024-01-01 12:00:00
             '%Y/%m/%d %H:%M:%S',  # 2024/01/01 12:00:00
+            '%Y-%m-%dT%H:%M:%S',  # 2024-01-01T12:00:00 (ISO 8601)
+            '%Y-%m-%dT%H:%M:%S.%f', # 2024-01-01T12:00:00.000000 (ISO 8601 with microseconds)
+            '%Y-%m-%dT%H:%M:%SZ',   # 2024-01-01T12:00:00Z (UTC)
+            
+            # 欧式格式（日-月-年）
             '%d-%m-%Y',           # 01-01-2024
             '%d/%m/%Y',           # 01/01/2024
-            '%m-%d-%Y',           # 01-01-2024 (美式)
-            '%m/%d/%Y',           # 01/01/2024 (美式)
+            '%d.%m.%Y',           # 01.01.2024
+            '%d-%m-%Y %H:%M:%S',  # 01-01-2024 12:00:00
+            '%d/%m/%Y %H:%M:%S',  # 01/01/2024 12:00:00
+            
+            # 美式格式（月-日-年）
+            '%m-%d-%Y',           # 01-01-2024
+            '%m/%d/%Y',           # 01/01/2024
+            '%m.%d.%Y',           # 01.01.2024
+            '%m-%d-%Y %H:%M:%S',  # 01-01-2024 12:00:00
+            '%m/%d/%Y %H:%M:%S',  # 01/01/2024 12:00:00
+            
+            # 中文格式
             '%Y年%m月%d日',        # 2024年01月01日
+            '%Y年%m月%d日 %H:%M:%S', # 2024年01月01日 12:00:00
+            
+            # 点分隔格式
             '%Y.%m.%d',           # 2024.01.01
+            '%Y.%m.%d %H:%M:%S',  # 2024.01.01 12:00:00
+            
+            # 无分隔符格式
+            '%Y%m%d',             # 20240101
+            '%Y%m%d%H%M%S',       # 20240101120000
+            
+            # 英文月份格式
+            '%d %B %Y',           # 01 January 2024
+            '%B %d, %Y',          # January 01, 2024
+            '%d %b %Y',           # 01 Jan 2024
+            '%b %d, %Y',          # Jan 01, 2024
+            '%d %B %Y %H:%M:%S',  # 01 January 2024 12:00:00
+            '%B %d, %Y %H:%M:%S', # January 01, 2024 12:00:00
+            
+            # 其他常见格式
+            '%Y-%m-%d %H:%M',     # 2024-01-01 12:00
+            '%Y/%m/%d %H:%M',     # 2024/01/01 12:00
+            '%d-%m-%Y %H:%M',     # 01-01-2024 12:00
+            '%m-%d-%Y %H:%M',     # 01-01-2024 12:00
         ]
         
         # 先尝试使用 format 参数（避免警告）
@@ -270,10 +309,13 @@ class DataSourceAdapter:
         # 如果指定格式都失败，尝试自动推断（使用 errors='coerce' 避免警告）
         # 注意：不指定 format 参数时，pandas 会自动推断，但可能产生警告
         # 使用 errors='coerce' 可以避免抛出异常，无法解析的值会变成 NaT
+        # 使用 warnings.filterwarnings 来抑制日期格式推断的警告
         try:
-            parsed = pd.to_datetime(sample_data, errors='coerce')
-            if parsed.notna().sum() >= len(sample_data) * 0.8:  # 至少80%能解析
-                return 'date'
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', message='Could not infer format')
+                parsed = pd.to_datetime(sample_data, errors='coerce')
+                if parsed.notna().sum() >= len(sample_data) * 0.8:  # 至少80%能解析
+                    return 'date'
         except (ValueError, TypeError):
             pass
         
