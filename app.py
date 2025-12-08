@@ -99,43 +99,61 @@ app.layout = html.Div(
 )
 def display_page(pathname, language):
     """根据路径显示对应页面"""
-    # 始终以配置文件为准（配置文件是持久化的，是真实的数据源）
-    # Store 的值在刷新时可能被重置为初始值，所以不能完全信任
-    config_lang = language_manager.load_language()
-    
-    # 确定要使用的语言：优先使用配置文件中的值
-    if config_lang and config_lang in ["zh", "en"]:
-        effective_language = config_lang
-    elif language and language in ["zh", "en"]:
-        # 如果配置文件无效，但 Store 有效，使用 Store 的值并更新配置文件
-        effective_language = language
-        language_manager.save_language(language)
-    else:
-        # 都无效，使用默认值
-        effective_language = "zh"
-        language_manager.save_language("zh")
-    
-    # 确保语言管理器使用正确的语言（必须在创建页面之前设置）
-    language_manager.set_language(effective_language)
-    
-    # 创建页面（此时语言管理器已经使用正确的语言）
-    if pathname == "/" or pathname == "/datasource":
-        page_content = create_datasource_page()
-    elif pathname == "/chart-designer":
-        page_content = create_chart_designer_page()
-    elif pathname == "/dashboard":
-        page_content = create_dashboard_page()
-    elif pathname == "/settings":
-        page_content = create_settings_page()
-    else:
-        # 默认跳转到数据源页面
-        page_content = create_datasource_page()
-    
-    # 如果 Store 的值与配置文件不一致，更新 Store
-    if language != effective_language:
-        return page_content, effective_language
-    else:
-        return page_content, dash.no_update
+    try:
+        # 始终以配置文件为准（配置文件是持久化的，是真实的数据源）
+        # Store 的值在刷新时可能被重置为初始值，所以不能完全信任
+        config_lang = language_manager.load_language()
+        
+        # 确定要使用的语言：优先使用配置文件中的值
+        if config_lang and config_lang in ["zh", "en"]:
+            effective_language = config_lang
+        elif language and language in ["zh", "en"]:
+            # 如果配置文件无效，但 Store 有效，使用 Store 的值并更新配置文件
+            effective_language = language
+            language_manager.save_language(language)
+        else:
+            # 都无效，使用默认值
+            effective_language = "zh"
+            language_manager.save_language("zh")
+        
+        # 确保语言管理器使用正确的语言（必须在创建页面之前设置）
+        language_manager.set_language(effective_language)
+        
+        # 创建页面（此时语言管理器已经使用正确的语言）
+        try:
+            if pathname == "/" or pathname == "/datasource":
+                page_content = create_datasource_page()
+            elif pathname == "/chart-designer":
+                page_content = create_chart_designer_page()
+            elif pathname == "/dashboard":
+                page_content = create_dashboard_page()
+            elif pathname == "/settings":
+                page_content = create_settings_page()
+            else:
+                # 默认跳转到数据源页面
+                page_content = create_datasource_page()
+        except Exception as e:
+            logger.error(f"创建页面失败 [路径: {pathname}]: {str(e)}", exc_info=True)
+            # 如果创建页面失败，返回数据源页面作为备用
+            page_content = create_datasource_page()
+        
+        # 如果 Store 的值与配置文件不一致，更新 Store
+        if language != effective_language:
+            return page_content, effective_language
+        else:
+            return page_content, dash.no_update
+    except Exception as e:
+        logger.error(f"display_page回调失败: {str(e)}", exc_info=True)
+        # 返回no_update以避免破坏UI，或者返回一个简单的错误页面
+        try:
+            error_page = html.Div([
+                html.H3("页面加载错误"),
+                html.P(f"错误信息: {str(e)}"),
+                html.A("返回首页", href="/datasource")
+            ], className="container mt-5")
+            return error_page, dash.no_update
+        except:
+            return dash.no_update, dash.no_update
 
 # ==========================================
 # 注册所有页面的回调函数
@@ -177,38 +195,48 @@ logger.info("所有页面回调函数注册完成")
 )
 def update_all_pages_on_language_change(language, pathname):
     """语言变化时更新所有页面和侧边栏"""
-    # 确保语言管理器使用正确的语言
-    if language and language in ["zh", "en"]:
-        logger.info(f"语言切换: {language}")
-        language_manager.set_language(language)
-    else:
-        # 如果 language 无效，使用语言管理器的当前值
-        language = language_manager.get_language()
-    texts = language_manager.get_all_texts(language)
-    
-    # 更新侧边栏
-    sidebar_title = texts["sidebar_title"]
-    nav_datasource = texts["datasource_management"]
-    nav_chart_designer = texts["chart_designer"]
-    nav_dashboard = texts["dashboard"]
-    nav_settings = texts["settings"]
-    sidebar_version = [texts["version"], ": v1.0"]
-    sidebar_ui_only = texts["ui_only"]
-    
-    # 更新当前页面
-    if pathname == "/" or pathname == "/datasource":
-        page_content = create_datasource_page()
-    elif pathname == "/chart-designer":
-        page_content = create_chart_designer_page()
-    elif pathname == "/dashboard":
-        page_content = create_dashboard_page()
-    elif pathname == "/settings":
-        page_content = create_settings_page()
-    else:
-        page_content = create_datasource_page()
-    
-    return (sidebar_title, nav_datasource, nav_chart_designer, nav_dashboard, 
-            nav_settings, sidebar_version, sidebar_ui_only, page_content)
+    try:
+        # 确保语言管理器使用正确的语言
+        if language and language in ["zh", "en"]:
+            logger.info(f"语言切换: {language}")
+            language_manager.set_language(language)
+        else:
+            # 如果 language 无效，使用语言管理器的当前值
+            language = language_manager.get_language()
+        texts = language_manager.get_all_texts(language)
+        
+        # 更新侧边栏
+        sidebar_title = texts.get("sidebar_title", "BI Platform")
+        nav_datasource = texts.get("datasource_management", "数据源")
+        nav_chart_designer = texts.get("chart_designer", "图表设计器")
+        nav_dashboard = texts.get("dashboard", "仪表盘")
+        nav_settings = texts.get("settings", "设置")
+        sidebar_version = [texts.get("version", "版本"), ": v1.0"]
+        sidebar_ui_only = texts.get("ui_only", "仅UI")
+        
+        # 更新当前页面
+        try:
+            if pathname == "/" or pathname == "/datasource":
+                page_content = create_datasource_page()
+            elif pathname == "/chart-designer":
+                page_content = create_chart_designer_page()
+            elif pathname == "/dashboard":
+                page_content = create_dashboard_page()
+            elif pathname == "/settings":
+                page_content = create_settings_page()
+            else:
+                page_content = create_datasource_page()
+        except Exception as e:
+            logger.error(f"创建页面失败 [路径: {pathname}]: {str(e)}", exc_info=True)
+            # 如果创建页面失败，返回数据源页面作为备用
+            page_content = create_datasource_page()
+        
+        return (sidebar_title, nav_datasource, nav_chart_designer, nav_dashboard, 
+                nav_settings, sidebar_version, sidebar_ui_only, page_content)
+    except Exception as e:
+        logger.error(f"语言切换回调失败: {str(e)}", exc_info=True)
+        # 返回no_update以避免破坏UI
+        return [dash.no_update] * 8
 
 # ==========================================
 # 启动应用

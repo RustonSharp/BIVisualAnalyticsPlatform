@@ -24,7 +24,9 @@ def create_chart_designer_page():
             dcc.Store(id="chart-field-assignments", data=default_chart_assignments()),
             dcc.Store(id="custom-colors-config", data={}),
             dcc.Store(id="field-agg-functions-config", data={}),  # 存储每个字段的聚合函数配置
-            dcc.Input(id="dnd-last-event", type="text", value="", style={"display": "none"}),
+            dcc.Store(id="dnd-last-event", data=""),
+            html.Button(id="dnd-event-trigger", n_clicks=0, style={"display": "none"}),
+            dcc.Store(id="dnd-event-data", data=""),
             
             dbc.Row(
                 [
@@ -37,8 +39,10 @@ def create_chart_designer_page():
                                     dbc.CardHeader(texts["select_datasource"], id="select-datasource-header"),
                                     dbc.CardBody(
                                         [
+                                            html.Label(texts["select_datasource"], htmlFor="chart-datasource-select", className="form-label", style={"display": "none"}),
                                             dbc.Select(
                                                 id="chart-datasource-select",
+                                                name="chart-datasource-select",
                                                 options=[],
                                                 value=None,
                                             ),
@@ -70,8 +74,10 @@ def create_chart_designer_page():
                                     dbc.CardHeader(texts["chart_type"], id="chart-type-header"),
                                     dbc.CardBody(
                                         [
+                                            html.Label(texts["chart_type"], htmlFor="chart-type", className="form-label", style={"display": "none"}),
                                             dbc.RadioItems(
                                                 id="chart-type",
+                                                name="chart-type",
                                                 options=[
                                                     {"label": texts["line_chart"], "value": "line"},
                                                     {"label": texts["bar_chart"], "value": "bar"},
@@ -176,9 +182,10 @@ def create_chart_designer_page():
                                                 html.Div(id="chart-config-table", children=[
                                                     html.Div(
                                                         [
-                                                            html.Label(texts["display_orientation"], className="form-label fw-bold mb-2"),
+                                                            html.Label(texts["display_orientation"], htmlFor="table-orientation", className="form-label fw-bold mb-2"),
                                                             dbc.RadioItems(
                                                                 id="table-orientation",
+                                                                name="table-orientation",
                                                                 options=[
                                                                     {"label": texts["horizontal_display"], "value": "horizontal"},
                                                                     {"label": texts["vertical_display"], "value": "vertical"},
@@ -249,9 +256,10 @@ def create_chart_designer_page():
                                         dbc.CardBody(
                                             [
                                                 html.Div([
-                                                    html.Label(texts["default_aggregation_function"], className="form-label mb-2"),
+                                                    html.Label(texts["default_aggregation_function"], htmlFor="agg-function", className="form-label mb-2"),
                                                     dbc.Select(
                                                         id="agg-function",
+                                                        name="agg-function",
                                                         options=[
                                                             {"label": texts["sum"], "value": "sum"},
                                                             {"label": texts["avg"], "value": "avg"},
@@ -282,11 +290,19 @@ def create_chart_designer_page():
                                     dbc.CardHeader(texts["style_config"], id="style-config-header"),
                                     dbc.CardBody(
                                         [
-                                            html.Label(texts["chart_title"], className="form-label"),
-                                            dbc.Input(id="chart-title", placeholder=texts["enter_chart_title"], type="text", className="mb-3"),
-                                            html.Label(texts["color_theme"], className="form-label"),
+                                            html.Label(texts["chart_title"], htmlFor="chart-title", className="form-label"),
+                                            dbc.Input(
+                                                id="chart-title", 
+                                                name="chart-title",
+                                                placeholder=texts["enter_chart_title"], 
+                                                type="text", 
+                                                className="mb-3", 
+                                                autoComplete="off"
+                                            ),
+                                            html.Label(texts["color_theme"], htmlFor="color-theme", className="form-label"),
                                             dbc.Select(
                                                 id="color-theme",
+                                                name="color-theme",
                                                 options=[
                                                     {"label": texts["default"], "value": "default"},
                                                     {"label": texts["business_blue"], "value": "blue"},
@@ -306,6 +322,7 @@ def create_chart_designer_page():
                                                     html.P(texts["set_group_field_first"], className="text-muted text-center py-3"),
                                                 ]),
                                             ], style={"display": "none"}),
+                                            html.Label(texts.get("chart_options", "图表选项"), htmlFor="chart-options", className="form-label", style={"display": "none"}),
                                             dbc.Checklist(
                                                 options=[
                                                     {"label": texts["show_labels"], "value": "show-labels"},
@@ -313,6 +330,7 @@ def create_chart_designer_page():
                                                 ],
                                                 value=["show-legend"],
                                                 id="chart-options",
+                                                name="chart-options",
                                             ),
                                         ]
                                     ),
@@ -415,6 +433,21 @@ def _generate_chart_cards(charts):
     if not charts:
         return html.P(texts["no_saved_charts"], className="text-muted text-center py-3")
     
+    # 按创建时间倒序排序（最新的在前）
+    def get_sort_key(chart):
+        created_at = chart.get('created_at', '')
+        if created_at:
+            try:
+                # 尝试解析ISO格式的时间
+                created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                return created_dt.timestamp()
+            except:
+                # 如果解析失败，使用字符串比较
+                return created_at
+        return ''
+    
+    sorted_charts = sorted(charts, key=get_sort_key, reverse=True)
+    
     chart_cards = []
     chart_type_names = {
         'line': texts['line_chart'],
@@ -424,7 +457,7 @@ def _generate_chart_cards(charts):
         'combo': texts['combo_chart']
     }
     
-    for chart in charts:
+    for chart in sorted_charts:
         chart_id_item = chart.get('id')
         chart_name_item = chart.get('name', chart.get('title', texts['unnamed_chart']))
         chart_type_item = chart.get('type', 'line')
@@ -605,10 +638,21 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             
             chart_config = config_manager.get_chart(chart_id)
             if not chart_config:
-                no_updates = [dash.no_update] * 11
                 texts = language_manager.get_all_texts()
-                no_updates.append(dbc.Alert(texts["chart_not_found"], color="danger", className="m-2"))
-                return tuple(no_updates)
+                return (
+                    dash.no_update,  # editing-chart-id
+                    dash.no_update,  # chart-datasource-select
+                    dash.no_update,  # chart-type
+                    dash.no_update,  # chart-field-assignments
+                    dash.no_update,  # agg-function
+                    dash.no_update,  # field-agg-functions-config
+                    dash.no_update,  # chart-title
+                    dash.no_update,  # color-theme
+                    dash.no_update,  # chart-options
+                    dash.no_update,  # custom-colors-config
+                    dash.no_update,  # table-orientation
+                    dbc.Alert(texts["chart_not_found"], color="danger", className="m-2")  # chart-save-status
+                )
             
             assignments = default_chart_assignments()
             assignments['x'] = chart_config.get('x')
@@ -645,10 +689,21 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 dbc.Alert(texts["chart_config_loaded"], color="success", className="m-2")
             )
         except Exception as e:
-            no_updates = [dash.no_update] * 11
             texts = language_manager.get_all_texts()
-            no_updates.append(dbc.Alert(texts["load_chart_failed"].format(str(e)), color="danger", className="m-2"))
-            return tuple(no_updates)
+            return (
+                dash.no_update,  # editing-chart-id
+                dash.no_update,  # chart-datasource-select
+                dash.no_update,  # chart-type
+                dash.no_update,  # chart-field-assignments
+                dash.no_update,  # agg-function
+                dash.no_update,  # field-agg-functions-config
+                dash.no_update,  # chart-title
+                dash.no_update,  # color-theme
+                dash.no_update,  # chart-options
+                dash.no_update,  # custom-colors-config
+                dash.no_update,  # table-orientation
+                dbc.Alert(texts["load_chart_failed"].format(str(e)), color="danger", className="m-2")  # chart-save-status
+            )
         
         return [dash.no_update] * 12
 
@@ -902,19 +957,23 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 group_val_str = str(group_val)
                 current_color = custom_colors.get(group_val_str, default_colors[i % len(default_colors)])
                 
+                # 为动态创建的输入字段生成唯一ID字符串用于htmlFor
+                color_input_id_str = f"custom-color-input-{group_val_str}"
                 color_inputs.append(
                     html.Div([
                         dbc.Row([
                             dbc.Col([
-                                html.Label(f"{group_val}", className="form-label mb-1 small"),
+                                html.Label(f"{group_val}", htmlFor=color_input_id_str, className="form-label mb-1 small"),
                             ], width=4),
                             dbc.Col([
                                 dbc.Input(
                                     id={"type": "custom-color-input", "group": group_val_str},
+                                    name=f"color-{group_val_str}",
                                     type="color",
                                     value=current_color,
                                     className="form-control form-control-color",
-                                    style={"width": "100%", "height": "38px"}
+                                    style={"width": "100%", "height": "38px"},
+                                    autoComplete="off"
                                 ),
                             ], width=6),
                             dbc.Col([
@@ -960,15 +1019,46 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         
         return new_colors, display_values
 
+    # 使用ClientsideCallback将事件数据传递到Store
+    app.clientside_callback(
+        """
+        function(n_clicks) {
+            try {
+                if (!n_clicks || n_clicks === 0) {
+                    return window.dash_clientside ? window.dash_clientside.no_update : null;
+                }
+                // 从全局变量读取事件数据
+                const eventData = (window._dndEventData || "").toString();
+                if (!eventData || eventData === "") {
+                    console.warn("ClientsideCallback: 没有事件数据");
+                    return window.dash_clientside ? window.dash_clientside.no_update : null;
+                }
+                console.log("ClientsideCallback触发: n_clicks=", n_clicks, "eventData=", eventData);
+                // 清空全局变量
+                window._dndEventData = "";
+                return eventData;
+            } catch (e) {
+                console.error("ClientsideCallback错误:", e);
+                return window.dash_clientside ? window.dash_clientside.no_update : null;
+            }
+        }
+        """,
+        Output("dnd-last-event", "data"),
+        Input("dnd-event-trigger", "n_clicks"),
+        prevent_initial_call=True
+    )
+
     @app.callback(
         Output("chart-field-assignments", "data", allow_duplicate=True),
-        Input("dnd-last-event", "value"),
+        Input("dnd-last-event", "data"),
         State("chart-field-assignments", "data"),
         prevent_initial_call=True
     )
     def handle_drag_drop_event(event_payload, assignments):
         """处理前端拖拽事件，更新字段配置"""
+        logger.debug(f"收到拖拽事件: event_payload={event_payload}")
         if not event_payload:
+            logger.debug("拖拽事件为空，跳过")
             raise dash.exceptions.PreventUpdate
         
         event_str = event_payload
@@ -977,11 +1067,14 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         
         try:
             event = json.loads(event_str)
-        except json.JSONDecodeError:
+            logger.debug(f"解析拖拽事件成功: {event}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"解析拖拽事件失败: {event_str}, 错误: {e}")
             raise dash.exceptions.PreventUpdate
         
         field = event.get('field')
         target = event.get('target')
+        logger.debug(f"拖拽字段: {field}, 目标: {target}")
         
         assignments = assignments or default_chart_assignments()
         new_assignments = {
@@ -1035,11 +1128,17 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
             new_assignments['group'] = None
         if target == 'drop-x-axis':
             new_assignments['x'] = field
+            logger.info(f"字段 {field} 已分配到X轴")
         elif target == 'drop-y-axis':
             if field not in new_assignments['y']:
                 new_assignments['y'].append(field)
+                logger.info(f"字段 {field} 已添加到Y轴")
         elif target == 'drop-group':
             new_assignments['group'] = field
+            logger.info(f"字段 {field} 已分配到分组")
+        else:
+            logger.warning(f"未知的拖拽目标: {target}")
+        logger.debug(f"更新后的字段配置: {new_assignments}")
         return new_assignments
 
     @app.callback(
@@ -1227,12 +1326,15 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
         field_selectors = []
         for field in y_fields:
             current_func = field_agg_config.get(field, default_agg_function)
+            # 为动态创建的Select生成唯一ID字符串用于htmlFor
+            select_id_str = f"field-agg-function-{field}"
             field_selectors.append(
                 dbc.Row([
                     dbc.Col([
-                        html.Label(f"{field}:", className="form-label small mb-1"),
+                        html.Label(f"{field}:", htmlFor=select_id_str, className="form-label small mb-1"),
                         dbc.Select(
                             id={"type": "field-agg-function", "field": field},
+                            name=f"agg-function-{field}",
                             options=[
                                 {"label": texts["sum"], "value": "sum"},
                                 {"label": texts["avg"], "value": "avg"},
@@ -1359,6 +1461,15 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                     if not group_field:
                         group_field = x_field
                 
+                # 验证字段是否存在于数据中
+                if x_field and x_field not in df.columns:
+                    return html.P(texts["field_not_in_data"].format(x_field), className="text-muted text-center py-5")
+                for y_field in y_fields:
+                    if y_field and y_field not in df.columns:
+                        return html.P(texts["field_not_in_data"].format(y_field), className="text-muted text-center py-5")
+                if group_field and group_field not in df.columns:
+                    return html.P(texts["field_not_in_data"].format(group_field), className="text-muted text-center py-5")
+                
                 chart_config = {
                     "type": chart_type or "line",
                     "x": x_field,
@@ -1375,9 +1486,16 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 fig = chart_engine.create_chart(df, chart_config)
                 logger.debug(f"图表预览生成成功 [类型: {chart_type}, 数据行数: {len(df)}]")
                 return dcc.Graph(figure=fig, id="preview-chart")
+        except KeyError as e:
+            # 字段不存在错误
+            missing_field = str(e).strip("'\"")
+            logger.warning(f"图表预览生成失败：字段不存在 [字段: {missing_field}, 类型: {chart_type}]")
+            texts = language_manager.get_all_texts()
+            return dbc.Alert(f"{texts.get('field_not_in_data', '字段不存在')}: {missing_field}", color="warning")
         except Exception as e:
             logger.error(f"图表预览生成失败 [类型: {chart_type}]: {str(e)}", exc_info=True)
-            return dbc.Alert(f"{texts['generate_chart_failed']}：{str(e)}", color="danger")
+            texts = language_manager.get_all_texts()
+            return dbc.Alert(f"{texts.get('generate_chart_failed', '生成图表失败')}：{str(e)}", color="danger")
 
     @app.callback(
         [Output("current-chart-config", "data", allow_duplicate=True),
@@ -1445,13 +1563,16 @@ def register_chart_designer_callbacks(app, config_manager, data_source_manager, 
                 chart_config['id'] = editing_id
             
             if config_manager.save_chart(chart_config):
+                chart_name = chart_config.get('name', title or texts["unnamed_chart"])
                 logger.info(f"用户保存图表 [ID: {chart_config.get('id')}, 名称: {chart_name}, 类型: {chart_type}]")
             else:
                 logger.error(f"保存图表失败 [ID: {chart_config.get('id')}]")
             
             # 重新加载图表列表
             charts = config_manager.load_charts()
+            logger.debug(f"重新加载图表列表: 共 {len(charts)} 个图表")
             charts_list = _generate_chart_cards(charts)
+            logger.debug(f"图表列表已生成，包含 {len(charts)} 个图表卡片")
             
             # 如果正在编辑，重新加载更新后的图表配置
             if editing_id:
